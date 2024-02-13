@@ -33,7 +33,8 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import BackgroundTasks, Depends, FastAPI, Response, Request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron.fields import BaseField
-from huggingface_hub import snapshot_download # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
+from huggingface_hub import \
+    snapshot_download  # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
 from nc_py_api.ex_app import (
     run_app,
     set_handlers,
@@ -41,21 +42,22 @@ from nc_py_api.ex_app import (
     atalk_bot_msg,
     nc_app,
     LogLvl,
-    persistent_storage, # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
+    persistent_storage,  # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
 )
 from random import choice
 from string import ascii_lowercase, ascii_uppercase, digits
 
-os.environ["APP_HOST"]="0.0.0.0"
-os.environ["APP_ID"]="sumupbot"
-os.environ["APP_PORT"]="9032"
-os.environ["APP_SECRET"]="12345"
-os.environ["APP_VERSION"]="1.0.0"
-os.environ["NEXTCLOUD_URL"]="http://localhost/nc_beta28"
+os.environ["APP_HOST"] = "0.0.0.0"
+os.environ["APP_ID"] = "sumupbot"
+os.environ["APP_PORT"] = "9032"
+os.environ["APP_SECRET"] = "12345"
+os.environ["APP_VERSION"] = "1.0.0"
+os.environ["NEXTCLOUD_URL"] = "http://localhost/nc_beta28"
 os.environ["APP_PERSISTENT_STORAGE"] = "/tmp/"
 
 logging.basicConfig(filename='/tmp/app.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+
 
 # The same stuff as for usual External Applications
 @asynccontextmanager
@@ -67,12 +69,14 @@ async def lifespan(_app: FastAPI):
 APP = FastAPI(lifespan=lifespan)
 # We define bot globally, so if no `multiprocessing` module is used, it can be reused by calls.
 # All stuff in it works only with local variables, so in the case of multithreading, there should not be problems.
-SUMMARIZE_BOT = talk_bot.TalkBot(f"/{os.environ['APP_ID']}", f"{os.environ['APP_ID'].capitalize()}", f"Usage: @{os.environ['APP_ID']} add <daily execution time - eg. 17:00> / @{os.environ['APP_ID']} list / @{os.environ['APP_ID']} delete <job_id> / @{os.environ['APP_ID']} help")
+SUMMARIZE_BOT = talk_bot.TalkBot(f"/{os.environ['APP_ID']}", f"{os.environ['APP_ID'].capitalize()}",
+                                 f"Usage: @{os.environ['APP_ID']} add <daily execution time - eg. 17:00> / @{os.environ['APP_ID']} list / @{os.environ['APP_ID']} delete <job_id> / @{os.environ['APP_ID']} help")
 
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-available_params=['add', 'list', 'delete', 'help']
+available_params = ['add', 'list', 'delete', 'help']
+
 
 def xml_to_json(xml_data):
     # Parse the XML
@@ -91,11 +95,13 @@ def xml_to_json(xml_data):
     json_data = {'types': types_list}
     return json_data
 
+
 def task_type_available(json_data, task_type_id):
     for type_info in json_data['types']:
         if type_info['id'] == task_type_id:
             return True
     return False
+
 
 def sign_request(headers: dict, user="admin") -> None:
     password = "admin"
@@ -106,12 +112,13 @@ def sign_request(headers: dict, user="admin") -> None:
     headers["OCS-APIRequest"] = "true"
     headers["Authorization"] = f'Basic {encoded_credentials}'
 
+
 def ocs_call(
-    method: str,
-    path: str,
-    params: typing.Optional[dict] = None,
-    json_data: typing.Optional[typing.Union[dict, list]] = None,
-    **kwargs,
+        method: str,
+        path: str,
+        params: typing.Optional[dict] = None,
+        json_data: typing.Optional[typing.Union[dict, list]] = None,
+        **kwargs,
 ):
     # Encode username and password
     method = method.upper()
@@ -121,7 +128,7 @@ def ocs_call(
     headers = kwargs.pop("headers", {})
     data_bytes = None
     if json_data is not None:
-        headers.update({"Content-Type": "application/json", "Accept" : "application/json"})
+        headers.update({"Content-Type": "application/json", "Accept": "application/json"})
         data_bytes = json.dumps(json_data).encode("utf-8")
 
     sign_request(headers, kwargs.get("user", "admin"))
@@ -132,14 +139,15 @@ def ocs_call(
         params=json_data,
         content=data_bytes,
         headers=headers,
-        timeout=6000 # 30 minutes timeout
+        timeout=6000  # 30 minutes timeout
     )
+
 
 def process_topics(input_string):
     # Split the string into lines
     lines = input_string.split('\n')
     processed_lines = []
-    
+
     for line in lines:
         # Remove leading and trailing whitespace
         trimmed_line = line.strip()
@@ -162,10 +170,11 @@ def process_topics(input_string):
             if not trimmed_line.endswith("*"):
                 trimmed_line += "*"
         processed_lines.append(trimmed_line)
-    
+
     # Join the processed lines back into a single string
     processed_string = '\n'.join(processed_lines)
     return processed_string
+
 
 def is_valid_time(hour, minute):
     if 0 <= hour <= 23 and 0 <= minute <= 59:
@@ -173,8 +182,8 @@ def is_valid_time(hour, minute):
     else:
         return False
 
-def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
+def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
     nc_app = NextcloudApp()
     # Define the path of the file
     print("\033[1;42mReceiving message...\033[0m", flush=True)
@@ -183,25 +192,25 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
         if message.object_name != "message":
             print("No message received...", flush=True)
             return
-        
+
         # We use a wildcard search to only respond to messages sent to us.
         r = re.sub(rf'^@f{os.environ["APP_ID"]} ', '', message.object_content["message"], re.IGNORECASE)
 
         if r is None:
             print("R is none", flush=True)
             return
-        
+
         conversation_name = getattr(message, 'conversation_name')
         conversation_token = getattr(message, 'conversation_token')
 
-        #summary = f'*Message:* **{r}** - *Conversation Name:* **{conversation_name}** - *Conversation Token:* **{conversation_token}**'
+        # summary = f'*Message:* **{r}** - *Conversation Name:* **{conversation_name}** - *Conversation Token:* **{conversation_token}**'
         endpoint = "/ocs/v2.php/apps/spreed/api/v1/chat/"
         params = {
-            "lookIntoFuture" : 0,
-            "limit" : 200
+            "lookIntoFuture": 0,
+            "limit": 200
         }
 
-        ocs_url=f'{os.environ["NEXTCLOUD_URL"]}{endpoint}{conversation_token}'
+        ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{endpoint}{conversation_token}'
         print("OCS_URL", f'{ocs_url}', flush=True)
         ##############
         #
@@ -210,14 +219,14 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
         ##############
         try:
             tasktype_endpoint = '/ocs/v2.php/textprocessing/tasktypes'
-            tasktype_ocs_url=f'{os.environ["NEXTCLOUD_URL"]}{tasktype_endpoint}'
+            tasktype_ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{tasktype_endpoint}'
             tasktype_result = ocs_call(method="GET", path=tasktype_ocs_url)
             print(f"Task Types -> {tasktype_ocs_url}", tasktype_result, flush=True)
         except Exception as e:
             logging.error(f"An error occurred: {e}")
 
         # Check for the specific task type ID
-        task_type="OCP\\TextProcessing\\SummaryTaskType"
+        task_type = "OCP\\TextProcessing\\SummaryTaskType"
         is_available = task_type_available(xml_to_json(tasktype_result.text), task_type)
         if not is_available:
             logging.error(f"The neccessary task type: {task_type} is not available")
@@ -231,8 +240,8 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
         print(f"Fetching ocs_call result on {ocs_url}", flush=True)
         result = ocs_call(method="GET", path=ocs_url, json_data=params)
-        j=result.json()
-        
+        j = result.json()
+
         ##############
         #
         # 3. Prepare the messages in a format thats good for summarizing
@@ -244,23 +253,24 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
         day = datetime.date.today()
 
-        skipper=[
+        skipper = [
             f"@{os.environ['APP_ID']} ",
             f"@{os.environ['APP_ID']}",
         ]
 
-        c=0
-        messages=f"{day}"
+        c = 0
+        messages = f"{day}"
         for el in j['ocs']['data']:
             timestamp = el['timestamp']
             dt = datetime.datetime.fromtimestamp(timestamp)
-            if dt.date() != day or any(el['message'].startswith(pattern) for pattern in skipper) or el['actorType'] == 'bots':
+            if dt.date() != day or any(el['message'].startswith(pattern) for pattern in skipper) or el[
+                'actorType'] == 'bots':
                 continue
             # system_message = f"Timestamp: {dt}"  # or any relevant system message
             # Formatting the message according to the template
             msg = f"{dt} {el['actorDisplayName']}: {el['message']}"
             messages = f"{msg}\n\n" + f"{messages}"
-            c+=1
+            c += 1
 
         if c == 0:
             logging.info("The chatroom didnt had a converstation today")
@@ -275,7 +285,7 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
         chunk_size = 2000
         try:
             add_task_endpoint = '/ocs/v2.php/textprocessing/schedule'
-            add_task_ocs_url=f'{os.environ["NEXTCLOUD_URL"]}{add_task_endpoint}'
+            add_task_ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{add_task_endpoint}'
             # Ensure the message is a string
             messages = str(messages)
 
@@ -288,18 +298,18 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
             for i in range(0, len(messages), chunk_size):
                 # Slice the message from the current index i up to i + chunk_size
-                #message_chunk = f"Chatroom: {conversation_name} at {day} \n \n \n { messages[i:i + chunk_size] }"
-                message_chunk = f"{ messages[i:i + chunk_size] }"
-                
-                all_message_chunks += f"{ messages[i:i + chunk_size] }\n"
+                # message_chunk = f"Chatroom: {conversation_name} at {day} \n \n \n { messages[i:i + chunk_size] }"
+                message_chunk = f"{messages[i:i + chunk_size]}"
+
+                all_message_chunks += f"{messages[i:i + chunk_size]}\n"
                 # Create an MD5 hash object
                 hash_object = hashlib.md5()
                 hash_object.update(message_chunk.encode())
                 md5_hash = hash_object.hexdigest()
 
                 # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
-                data={
-                    "input" : f"""  You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
+                data = {
+                    "input": f"""  You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
                                     The chat log will be provided to you below contained within the following tags:
 
                                     ***CHAT_LOG_START***
@@ -318,9 +328,9 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
                                     Now, please provide an insighful summary of the provided chat log.
                                     Please, do not leave out any important facts! But keep the summary still compact so that its readable in roughly 30 seconds.
                                 """,
-                    "type" : task_type,
-                    "appId" : os.environ["APP_ID"],
-                    "identifier" : md5_hash
+                    "type": task_type,
+                    "appId": os.environ["APP_ID"],
+                    "identifier": md5_hash
                 }
                 add_task_result = ocs_call(method="POST", path=add_task_ocs_url, json_data=data)
                 ai_result = add_task_result.json()
@@ -330,16 +340,17 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
             print(f"\033[1;43m{len(messages)} > {chunk_size}\033[0m", flush=True)
             if len(messages) > chunk_size:
-                print(f"\033[1;42mRe-Summarize:\033[0m Create summary of summary - {len(messages)} > {chunk_size}", flush=True)
+                print(f"\033[1;42mRe-Summarize:\033[0m Create summary of summary - {len(messages)} > {chunk_size}",
+                      flush=True)
                 try:
-                # Create an MD5 hash object
+                    # Create an MD5 hash object
                     hash_object = hashlib.md5()
                     hash_object.update(summary.encode())
                     md5_hash = hash_object.hexdigest()
 
                     # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
-                    data={
-                        "input" : f"""  You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
+                    data = {
+                        "input": f"""  You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
                                         The chat log will be provided to you below contained within the following tags:
 
                                         ***CHAT_LOG_START***
@@ -358,9 +369,9 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
                                         Now, please provide an insighful summary of the provided chat log.
                                         Please, do not leave out any important facts! But keep the summary still compact so that its readable in roughly 30 seconds.
                                     """,
-                        "type" : task_type,
-                        "appId" : os.environ["APP_ID"],
-                        "identifier" : md5_hash
+                        "type": task_type,
+                        "appId": os.environ["APP_ID"],
+                        "identifier": md5_hash
                     }
                     add_task_result = ocs_call(method="POST", path=add_task_ocs_url, json_data=data)
                     ai_result = add_task_result.json()
@@ -376,8 +387,8 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
                 hash_object.update(all_messages.encode())
                 md5_hash = hash_object.hexdigest()
                 # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
-                topic_data={
-                    "input" : f"""  You are tasked with providing an insightful and succint summarization in topics of a summary.
+                topic_data = {
+                    "input": f"""  You are tasked with providing an insightful and succint summarization in topics of a summary.
                                     The topics should be seperated in new lines, each line should begin with a trailing dash
                                     The summary will be provided to you below contained within the following tags:
                                     ***CHAT_LOG_START***
@@ -390,19 +401,19 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
                                     Now, please provide an insighful topics of the summary.
                                     Please, do not leave out any important topics! The topics should be seperated in new lines.
                                 """,
-                    "type" : task_type,
-                    "appId" : os.environ["APP_ID"],
-                    "identifier" : md5_hash
+                    "type": task_type,
+                    "appId": os.environ["APP_ID"],
+                    "identifier": md5_hash
                 }
                 add_topic_result = ocs_call(method="POST", path=add_task_ocs_url, json_data=topic_data)
                 ai_topic_result = add_topic_result.json()
                 topic_output = str(ai_topic_result['ocs']['data']['task']['output'])
-                topics=re.sub(r"^[\t ]+", "", f"{topic_output}")
+                topics = re.sub(r"^[\t ]+", "", f"{topic_output}")
                 topics = process_topics(topics)
 
             except Exception as e:
                 print(f"\033[1;31mError\033[0m Cant create topics {e}")
-                topics=""
+                topics = ""
                 pass
 
             if topics:
@@ -415,11 +426,12 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
         except Exception as e:
             logging.error(f"1. An error occurred: {e}")
-            #SUMMARIZE_BOT.send_message(f"```1 An error occurred: {e}```", message)
+            # SUMMARIZE_BOT.send_message(f"```1 An error occurred: {e}```", message)
 
     except Exception as e:
         logging.error(f"2. An error occurred: {e}")
-        #SUMMARIZE_BOT.send_message(f"```2 An error occurred: {e}```", message)
+        # SUMMARIZE_BOT.send_message(f"```2 An error occurred: {e}```", message)
+
 
 def is_numbers_and_colon(s):
     for char in s:
@@ -427,8 +439,12 @@ def is_numbers_and_colon(s):
             return False
     return True
 
+
 def help_message(message, text):
-    SUMMARIZE_BOT.send_message(f"\n\n**{os.environ['APP_ID']}**:\n*{text}*\n\n**Commands:**\n```\nAdd a sumupjob (The job will be executed daily at the same time):\n\t@{os.environ['APP_ID']} add <hour>:<minute>\n\nList scheduled sumupjobs:\n\t@{os.environ['APP_ID']} list\n\nDelete a sumupjob:\n\t@{os.environ['APP_ID']} delete <job_id>\n\nPrints a help message:\n\t@{os.environ['APP_ID']} help\n```", message)
+    SUMMARIZE_BOT.send_message(
+        f"\n\n**{os.environ['APP_ID']}**:\n*{text}*\n\n**Commands:**\n```\nAdd a sumupjob (The job will be executed daily at the same time):\n\t@{os.environ['APP_ID']} add <hour>:<minute>\n\nList scheduled sumupjobs:\n\t@{os.environ['APP_ID']} list\n\nDelete a sumupjob:\n\t@{os.environ['APP_ID']} delete <job_id>\n\nPrints a help message:\n\t@{os.environ['APP_ID']} help\n```",
+        message)
+
 
 @APP.post(f"/{os.environ['APP_ID']}")
 async def sumupbot(
@@ -437,7 +453,7 @@ async def sumupbot(
 ):
     print("\033[1;46mLog here\033[0m", flush=True)
     if message.object_content["message"].startswith(f"@{os.environ['APP_ID']} "):
-        
+
         conversation_token = getattr(message, 'conversation_token')
         conversation_name = getattr(message, 'conversation_name')
         param = message.object_content["message"].split(" ")[1]
@@ -449,19 +465,19 @@ async def sumupbot(
         #######
 
         if param not in available_params:
-            text="You gave me a command i don't understand, these are available commands"
+            text = "You gave me a command i don't understand, these are available commands"
             help_message(message, text)
             return Response()
         else:
-            
+
             #########
             #
             # Check for parameters that arent times
             #
             #########
             if param == 'add':
-                hour_minute=message.object_content["message"].split(" ")[2]
-                
+                hour_minute = message.object_content["message"].split(" ")[2]
+
                 if not is_numbers_and_colon(hour_minute):
                     SUMMARIZE_BOT.send_message(f"```Usage: @{os.environ['APP_ID']} <hour>:<minute>```", message)
                     return Response()
@@ -473,31 +489,33 @@ async def sumupbot(
                         hour = int(hour)
                         minute = int(minute)
                     except ValueError:
-                        info_msg="Hour and/or minute(s) are not integers."
+                        info_msg = "Hour and/or minute(s) are not integers."
                         logging.error(info_msg)
                         SUMMARIZE_BOT.send_message(f"```{info_msg}```", message)
                         return Response()
-                    
+
                     if not is_valid_time(hour, minute):
                         logging.error(f"Its not a valid time {hour}:{minute}:00")
-                        SUMMARIZE_BOT.send_message(f"```Its not a valid time - please use @{os.environ['APP_ID']} hour:minute to schedule the bot for execution```", message)
+                        SUMMARIZE_BOT.send_message(
+                            f"```Its not a valid time - please use @{os.environ['APP_ID']} hour:minute to schedule the bot for execution```",
+                            message)
                         return Response()
-                    
+
                     # Parameters for the new job
                     new_job_hour = int(hour)
                     new_job_minute = int(minute)
                     new_job_id = conversation_token
                     new_job_room = conversation_name
-                    new_job_hash =  f"{conversation_token}_{hashlib.md5(f'{conversation_token}_{conversation_name}_{new_job_hour}_{new_job_minute}'.encode()).hexdigest()}"
+                    new_job_hash = f"{conversation_token}_{hashlib.md5(f'{conversation_token}_{conversation_name}_{new_job_hour}_{new_job_minute}'.encode()).hexdigest()}"
 
                     # Check if a similar job already exists
                     job_exists = False
                     job_hash = new_job_hash
 
-                    for job in scheduler.get_jobs():                            
+                    for job in scheduler.get_jobs():
                         trigger = job.trigger
                         job_id = job.id
-                        
+
                         old_conversation_token = job.id.split("_")[0]
 
                         if isinstance(trigger, CronTrigger):
@@ -505,7 +523,7 @@ async def sumupbot(
                             job_minute = trigger.fields[trigger.FIELD_NAMES.index('minute')]
                             job_day_of_week = trigger.fields[trigger.FIELD_NAMES.index('day_of_week')]
 
-                            old_job_hash =  f"{old_conversation_token}_{hashlib.md5(f'{old_conversation_token}_{conversation_name}_{job_hour}_{job_minute}'.encode()).hexdigest()}"
+                            old_job_hash = f"{old_conversation_token}_{hashlib.md5(f'{old_conversation_token}_{conversation_name}_{job_hour}_{job_minute}'.encode()).hexdigest()}"
 
                             if isinstance(job_hour, BaseField):
                                 job_hour = job_hour.expressions[0]
@@ -515,7 +533,8 @@ async def sumupbot(
                                 job_minute = job_minute.expressions[0]
                                 job_minute = int(f"{job_minute}")
 
-                            if (job_hour == new_job_hour and job_minute == new_job_minute and old_job_hash == new_job_hash):
+                            if (
+                                    job_hour == new_job_hour and job_minute == new_job_minute and old_job_hash == new_job_hash):
                                 job_exists = True
                                 break
 
@@ -526,9 +545,10 @@ async def sumupbot(
                         if job_minute <= 9:
                             job_minute = f"0{job_minute}"
 
-                        SUMMARIZE_BOT.send_message(f"```Skip - A {os.environ['APP_ID']} job already exists at {job_hour}:{job_minute}:00 for '{conversation_name}' with the id: {job.id}```", message)
+                        SUMMARIZE_BOT.send_message(
+                            f"```Skip - A {os.environ['APP_ID']} job already exists at {job_hour}:{job_minute}:00 for '{conversation_name}' with the id: {job.id}```",
+                            message)
                         return Response()
-                    
 
                     ##########
                     #
@@ -536,19 +556,22 @@ async def sumupbot(
                     #
                     ##########
 
-                    scheduler.add_job(lambda: summarize_talk_bot_process_request(message), 'cron', hour=hour, minute=minute, day_of_week='*', id=job_hash)
+                    scheduler.add_job(lambda: summarize_talk_bot_process_request(message), 'cron', hour=hour,
+                                      minute=minute, day_of_week='*', id=job_hash)
                     if hour <= 9:
                         hour = f"0{hour}"
                     if minute <= 9:
                         minute = f"0{minute}"
-                    SUMMARIZE_BOT.send_message(f"```New: Added a daily summary task at {hour}:{minute}:00 for '{conversation_name}' with the id: {job_hash}```", message)
+                    SUMMARIZE_BOT.send_message(
+                        f"```New: Added a daily summary task at {hour}:{minute}:00 for '{conversation_name}' with the id: {job_hash}```",
+                        message)
                 except Exception as e:
                     logging.error(f"A error occured: {e}")
                     SUMMARIZE_BOT.send_message(f"```Error {e}```", message)
 
             elif param == 'list':
                 jobs = scheduler.get_jobs()
-                job_list=[]
+                job_list = []
                 for idx, job in enumerate(jobs):
                     logging.info(f"Job ID: {job.id}, Next Run Time: {job}")
                     trigger = job.trigger
@@ -566,7 +589,7 @@ async def sumupbot(
                         job_day_of_week = 'Daily'
 
                     if f"{job.id}".startswith(f"{conversation_token}_"):
-                        job_list.append(f"{idx+1}. Job ID: {job.id} {job_hour}:{job_minute}:00 {job_day_of_week}")
+                        job_list.append(f"{idx + 1}. Job ID: {job.id} {job_hour}:{job_minute}:00 {job_day_of_week}")
 
                 # Check if job_list is empty
                 if not job_list:
@@ -581,9 +604,11 @@ async def sumupbot(
                     job_id_to_delete = message.object_content["message"].split(" ")[2]
                 except:
                     job_id_to_delete = False
-                
+
                 if not job_id_to_delete:
-                    SUMMARIZE_BOT.send_message(f"```No Job ID to delete given - use '@{os.environ['APP_ID']} list' to get a list of scheduled job ids```", message)
+                    SUMMARIZE_BOT.send_message(
+                        f"```No Job ID to delete given - use '@{os.environ['APP_ID']} list' to get a list of scheduled job ids```",
+                        message)
                     return Response()
 
                 #######
@@ -592,7 +617,7 @@ async def sumupbot(
                 # otherwise a scheduled job could be deleted from every other room
                 # 
                 #######
-                
+
                 job_deleted = False
 
                 if job_id_to_delete.startswith(f"{conversation_token}_"):
@@ -600,35 +625,42 @@ async def sumupbot(
                     for job in jobs:
                         if job.id == job_id_to_delete:
                             scheduler.remove_job(job_id_to_delete)
-                            job_deleted=True
+                            job_deleted = True
                 else:
-                    SUMMARIZE_BOT.send_message(f"```You are not allowed to do that - you need to be member of the room```", message)
+                    SUMMARIZE_BOT.send_message(
+                        f"```You are not allowed to do that - you need to be member of the room```", message)
                     return Response()
 
                 if job_deleted:
-                    SUMMARIZE_BOT.send_message(f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```", message)
+                    SUMMARIZE_BOT.send_message(f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```",
+                                               message)
                     return Response()
             elif param == 'help':
-                text="I am happy to help, these are commands you can use"
+                text = "I am happy to help, these are commands you can use"
                 help_message(message, text)
                 return Response()
             else:
-                text="Yes I am here and listening"
+                text = "Yes I am here and listening"
                 help_message(message, text)
                 return Response()
-            
-    elif (message.object_content["message"].startswith(f"@{os.environ['APP_ID']}") and message.object_content["message"].endswith(f"@{os.environ['APP_ID']}")) or (message.object_content["message"].startswith(f"@{os.environ['APP_ID']} ") and message.object_content["message"].endswith(f"@{os.environ['APP_ID']} ")):
-        text="Hi! I am here and listening"
+
+    elif (message.object_content["message"].startswith(f"@{os.environ['APP_ID']}") and message.object_content[
+        "message"].endswith(f"@{os.environ['APP_ID']}")) or (
+            message.object_content["message"].startswith(f"@{os.environ['APP_ID']} ") and message.object_content[
+        "message"].endswith(f"@{os.environ['APP_ID']} ")):
+        text = "Hi! I am here and listening"
         help_message(message, text)
         return Response()
-        
+
     return Response()
+
 
 ############
 #
 # Skeleton app for enabled_handler actualy wrong - doesnt do anything just loggin without enabling/disabling
 #
 ###########
+
 
 def enabled_handler(enabled: bool, nc: NextcloudApp) -> str:
     print(f"enabled={enabled}")
@@ -638,6 +670,7 @@ def enabled_handler(enabled: bool, nc: NextcloudApp) -> str:
     except Exception as e:
         return str(e)
     return ""
+
 
 if __name__ == "__main__":
     run_app("main:APP", log_level="trace", reload=True)
