@@ -78,24 +78,6 @@ scheduler.start()
 available_params = ['add', 'list', 'delete', 'help']
 
 
-def xml_to_json(xml_data):
-    # Parse the XML
-    base_xml = ET.fromstring(xml_data)
-    # Initialize an empty list to hold the converted data
-    types_list = []
-    # Iterate through the XML, extracting the data
-    for element in base_xml.findall('.//element'):
-        type_info = {
-            'id': element.find('id').text,
-            'name': element.find('name').text,
-            'description': element.find('description').text
-        }
-        types_list.append(type_info)
-    # Construct the final JSON object
-    json_data = {'types': types_list}
-    return json_data
-
-
 def task_type_available(json_data, task_type_id):
     for type_info in json_data['types']:
         if type_info['id'] == task_type_id:
@@ -219,15 +201,15 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
         ##############
         try:
             tasktype_endpoint = '/ocs/v2.php/textprocessing/tasktypes'
-            tasktype_ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{tasktype_endpoint}'
-            tasktype_result = ocs_call(method="GET", path=tasktype_ocs_url)
-            print(f"Task Types -> {tasktype_ocs_url}", tasktype_result, flush=True)
+            tasktype_result: dict = nc_app.ocs(method="GET", path=tasktype_endpoint)
+            print(f"Task Types -> {tasktype_endpoint}", tasktype_result, flush=True)
         except Exception as e:
             logging.error(f"An error occurred: {e}")
+            return
 
         # Check for the specific task type ID
         task_type = "OCP\\TextProcessing\\SummaryTaskType"
-        is_available = task_type_available(xml_to_json(tasktype_result.text), task_type)
+        is_available = task_type_available(tasktype_result, task_type)
         if not is_available:
             logging.error(f"The neccessary task type: {task_type} is not available")
             return Response()
@@ -238,9 +220,7 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
         #
         ##############
 
-        print(f"Fetching ocs_call result on {ocs_url}", flush=True)
-        result = ocs_call(method="GET", path=ocs_url, json_data=params)
-        j = result.json()
+        chat_messages = nc_app.talk.receive_messages(conversation_token, limit=200)
 
         ##############
         #
@@ -260,15 +240,14 @@ def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
 
         c = 0
         messages = f"{day}"
-        for el in j['ocs']['data']:
-            timestamp = el['timestamp']
+        for el in chat_messages:
+            timestamp = el.timestamp
             dt = datetime.datetime.fromtimestamp(timestamp)
-            if dt.date() != day or any(el['message'].startswith(pattern) for pattern in skipper) or el[
-                'actorType'] == 'bots':
+            if dt.date() != day or any(el.message.startswith(pattern) for pattern in skipper) or el.actor_type == 'bots':
                 continue
             # system_message = f"Timestamp: {dt}"  # or any relevant system message
             # Formatting the message according to the template
-            msg = f"{dt} {el['actorDisplayName']}: {el['message']}"
+            msg = f"{dt} {el.actor_display_name}: {el.message}"
             messages = f"{msg}\n\n" + f"{messages}"
             c += 1
 
