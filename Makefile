@@ -29,37 +29,42 @@ build-push:
 .PHONY: deploy
 deploy:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister talk_bot --silent || true
-	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:deploy talk_bot docker_dev \
-		--info-xml https://raw.githubusercontent.com/cloud-py-api/nc_py_api/main/examples/as_app/talk_bot/appinfo/info.xml
+	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register talk_bot docker_dev --json-info \
+  "{\"appid\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":1}" \
+  --force-scopes --wait-finish
 
 .PHONY: deploy27
 deploy27:
 	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:unregister talk_bot --silent || true
-	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:deploy talk_bot docker_dev \
-		--info-xml https://raw.githubusercontent.com/cloud-py-api/nc_py_api/main/examples/as_app/talk_bot/appinfo/info.xml
+	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:register talk_bot docker_dev --json-info \
+  "{\"appid\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":1}" \
+  --force-scopes --wait-finish
+
 
 .PHONY: run
 run:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister talk_bot --silent || true
-	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register talk_bot docker_dev --force-scopes \
-		--info-xml https://raw.githubusercontent.com/cloud-py-api/nc_py_api/main/examples/as_app/talk_bot/appinfo/info.xml
+	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register talk_bot docker_dev --json-info \
+  "{\"appid\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":1}" \
+  --force-scopes --wait-finish
+
 
 .PHONY: run27
 run27:
 	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:unregister talk_bot --silent || true
-	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:register talk_bot docker_dev --force-scopes \
-		--info-xml https://raw.githubusercontent.com/cloud-py-api/nc_py_api/main/examples/as_app/talk_bot/appinfo/info.xml
+	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:register talk_bot manual_install --json-info \
+  "{\"appid\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":1}" \
+  --force-scopes --wait-finish
 
 .PHONY: register
 register:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister talk_bot --silent || true
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register talk_bot manual_install --json-info \
-  "{\"appid\":\"talk_bot\",\"name\":\"TalkBot\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"TALK\", \"TALK_BOT\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":0}" \
+  "{\"appid\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":1}" \
   --force-scopes --wait-finish
-
 .PHONY: register27
 register27:
 	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:unregister talk_bot --silent || true
 	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:register talk_bot manual_install --json-info \
-  "{\"appid\":\"talk_bot\",\"name\":\"TalkBot\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"TALK\", \"TALK_BOT\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":0}" \
+  "{\"appid\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"host.docker.internal\",\"port\":9032,\"scopes\":{\"required\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\"],\"optional\":[]},\"protocol\":\"http\",\"system_app\":1}" \
   --force-scopes --wait-finish
