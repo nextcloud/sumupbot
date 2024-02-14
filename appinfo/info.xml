@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
 <info>
-	<id>sumupbot</id>
-	<name>Sumupbot</name>
-	<summary>Nextcloud Sumup Bot Example</summary>
+	<id>summarai</id>
+	<name>SummarAI</name>
+	<summary>Nextcloud chat summarize bot example</summary>
 	<description>
-	<![CDATA[Example of the Nextcloud Sumup Bot written in python]]>
+	<![CDATA[Example of the Nextcloud chat summarize bot written in python]]>
 	</description>
 	<version>1.0.0</version>
 	<licence>MIT</licence>
 	<author mail="florian.klinger@nextcloud.com" homepage="https://github.com/nc-fkl">Florian Klinger</author>
-	<namespace>SumupBotExample</namespace>
+	<namespace>SummarAI</namespace>
 	<category>tools</category>
 	<website>https://github.com/cloud-py-api/nc_py_api</website>
 	<bugs>https://github.com/cloud-py-api/nc_py_api/issues</bugs>
@@ -20,7 +20,7 @@
 	<external-app>
 		<docker-install>
 			<registry>ghcr.io</registry>
-			<image>cloud-py-api/sumupbot</image>
+			<image>cloud-py-api/summarai</image>
 			<image-tag>latest</image-tag>
 		</docker-install>
 		<scopes>
@@ -29,11 +29,13 @@
 				<value>TALK_BOT</value>
 				<value>AI_PROVIDERS</value>
 				<value>NOTIFICATIONS</value>
+				<value>USER_INFO</value>
+				<value>SYSTEM</value>
 			</required>
 			<optional>
 			</optional>
 		</scopes>
 		<protocol>http</protocol>
-		<system>false</system>
+		<system>true</system>
 	</external-app>
 </info>
