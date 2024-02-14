@@ -24,18 +24,13 @@
 			<image-tag>latest</image-tag>
 		</docker-install>
 		<scopes>
-			<required>
-				<value>TALK</value>
-				<value>TALK_BOT</value>
-				<value>AI_PROVIDERS</value>
-				<value>NOTIFICATIONS</value>
-				<value>USER_INFO</value>
-				<value>SYSTEM</value>
-			</required>
-			<optional>
-			</optional>
+			<value>TALK</value>
+			<value>TALK_BOT</value>
+			<value>AI_PROVIDERS</value>
+			<value>NOTIFICATIONS</value>
+			<value>USER_INFO</value>
+			<value>SYSTEM</value>
 		</scopes>
-		<protocol>http</protocol>
 		<system>true</system>
 	</external-app>
 </info>
