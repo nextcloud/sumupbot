@@ -37,6 +37,7 @@ from apscheduler.triggers.cron.fields import BaseField
 from huggingface_hub import \
     snapshot_download  # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
 from nc_py_api.ex_app import (
+    AppAPIAuthMiddleware,
     run_app,
     set_handlers,
     anc_app,
@@ -62,12 +63,14 @@ logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
 # The same stuff as for usual External Applications
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
-    set_handlers(APP, enabled_handler)
+async def lifespan(app: FastAPI):
+    set_handlers(app, enabled_handler)
     yield
 
 
 APP = FastAPI(lifespan=lifespan)
+APP.add_middleware(AppAPIAuthMiddleware)
+
 # We define bot globally, so if no `multiprocessing` module is used, it can be reused by calls.
 # All stuff in it works only with local variables, so in the case of multithreading, there should not be problems.
 SUMMARAI = talk_bot.TalkBot(f"/{os.environ['APP_ID']}", f"{os.environ['APP_ID'].capitalize()}",
