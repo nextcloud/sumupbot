@@ -34,8 +34,9 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import BackgroundTasks, Depends, FastAPI, Response, Request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron.fields import BaseField
-from huggingface_hub import \
-    snapshot_download  # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
+from huggingface_hub import (
+    snapshot_download,
+)  # missing in docu - https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
 from nc_py_api.ex_app import (
     AppAPIAuthMiddleware,
     run_app,
@@ -49,16 +50,22 @@ from nc_py_api.ex_app import (
 from random import choice
 from string import ascii_lowercase, ascii_uppercase, digits
 
-os.environ["APP_HOST"] = "0.0.0.0"
-os.environ["APP_ID"] = "summarai"
-os.environ["APP_PORT"] = "9032"
-os.environ["APP_SECRET"] = "12345"
-os.environ["APP_VERSION"] = "1.0.0"
-os.environ["NEXTCLOUD_URL"] = "http://localhost/nc_beta28"
-os.environ["APP_PERSISTENT_STORAGE"] = "/tmp/"
+#### For local dev purposes
+#
+#os.environ["APP_HOST"] = "0.0.0.0"
+#os.environ["APP_ID"] = "summarai"
+#os.environ["APP_PORT"] = "9032"
+#os.environ["APP_SECRET"] = "12345"
+#os.environ["APP_VERSION"] = "1.0.0"
+#os.environ["NEXTCLOUD_URL"] = "http://localhost/nc_beta28"
+#os.environ["APP_PERSISTENT_STORAGE"] = "/tmp/"
 
-logging.basicConfig(filename='/tmp/app.log', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+logging.basicConfig(
+    filename="/tmp/app.log",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logging.getLogger("apscheduler").setLevel(logging.DEBUG)
 
 
 # The same stuff as for usual External Applications
@@ -73,24 +80,29 @@ APP.add_middleware(AppAPIAuthMiddleware)
 
 # We define bot globally, so if no `multiprocessing` module is used, it can be reused by calls.
 # All stuff in it works only with local variables, so in the case of multithreading, there should not be problems.
-SUMMARAI = talk_bot.TalkBot(f"/{os.environ['APP_ID']}", f"{os.environ['APP_ID'].capitalize()}",
-                                 f"Usage: @{os.environ['APP_ID']} add <daily execution time - eg. 17:00> / @{os.environ['APP_ID']} list / @{os.environ['APP_ID']} delete <job_id> / @{os.environ['APP_ID']} help")
+SUMMARAI = talk_bot.TalkBot(
+    f"/{os.environ['APP_ID']}",
+    f"{os.environ['APP_ID'].capitalize()}",
+    f"Usage: @{os.environ['APP_ID']} add <daily execution time - eg. 17:00> / @{os.environ['APP_ID']} list / @{os.environ['APP_ID']} delete <job_id> / @{os.environ['APP_ID']} help",
+)
 
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-available_params = ['add', 'list', 'delete', 'help']
-chat_log={}
+available_params = ["add", "list", "delete", "help"]
+chat_log = {}
+
 
 def task_type_available(json_data, task_type_id):
-    for type_info in json_data['types']:
-        if type_info['id'] == task_type_id:
+    for type_info in json_data["types"]:
+        if type_info["id"] == task_type_id:
             return True
     return False
 
+
 def process_topics(input_string):
     # Split the string into lines
-    lines = input_string.split('\n')
+    lines = input_string.split("\n")
     processed_lines = []
 
     for line in lines:
@@ -117,7 +129,7 @@ def process_topics(input_string):
         processed_lines.append(trimmed_line)
 
     # Join the processed lines back into a single string
-    processed_string = '\n'.join(processed_lines)
+    processed_string = "\n".join(processed_lines)
     return processed_string
 
 
@@ -128,17 +140,22 @@ def is_valid_time(hour, minute):
         return False
 
 
-#def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
-def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_messages: list, conversation_name: str, conversation_token: str):
+# def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
+def summarai_talk_bot_process_request(
+    message: talk_bot.TalkBotMessage,
+    chat_messages: list,
+    conversation_name: str,
+    conversation_token: str,
+):
     nc_app = NextcloudApp()
 
     # set_user needed for accessing the Talk API to get all messages
     # waiting for https://github.com/nextcloud/spreed/issues/10401 as
     # talk api doesnt provide the feature to get the participants of a room
     # and therefore we dont know which user we should use as the user has to be
-    # member of the room to get the messages. 
+    # member of the room to get the messages.
     # nc_app.users_list() just provides all users of the system - therefore not usable in this case
-    #nc_app.set_user('<username_of_the_room_goes_here>')
+    # nc_app.set_user('<username_of_the_room_goes_here>')
 
     # Define the path of the file
     print("\033[1;42mReceiving message...\033[0m", flush=True)
@@ -153,7 +170,7 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
         #
         ##############
         try:
-            tasktype_endpoint = '/ocs/v2.php/textprocessing/tasktypes'
+            tasktype_endpoint = "/ocs/v2.php/textprocessing/tasktypes"
             tasktype_result: dict = nc_app.ocs(method="GET", path=tasktype_endpoint)
         except Exception as e:
             logging.error(f"An error occurred while checking {tasktype_endpoint}: {e}")
@@ -181,7 +198,7 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
         ##############
         # Go through all the received chat messages and get only the messages of the current day
         # Skip all messages from bots, so that only user messages will be used for a summary
-        
+
         day = datetime.today()
         skipper = [
             f"@{os.environ['APP_ID']} ",
@@ -191,11 +208,13 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
         c = 0
         messages = f"{day}"
         for el in chat_messages:
-            date_str = el.split(' ')[0]
-            time_str = el.split(' ')[1]
-            username = el.split(' ')[2]
+            date_str = el.split(" ")[0]
+            time_str = el.split(" ")[1]
+            username = el.split(" ")[2]
             dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-            if dt.date() != day.date() or any(username.startswith(pattern) for pattern in skipper):
+            if dt.date() != day.date() or any(
+                username.startswith(pattern) for pattern in skipper
+            ):
                 continue
 
             msg = f"{el}"
@@ -214,7 +233,7 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
 
         chunk_size = 2000
         try:
-            add_task_endpoint = '/ocs/v2.php/textprocessing/schedule'
+            add_task_endpoint = "/ocs/v2.php/textprocessing/schedule"
             add_task_ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{add_task_endpoint}'
             # Ensure the message is a string
             messages = str(messages)
@@ -260,12 +279,14 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
                                 """,
                     "type": task_type,
                     "appId": os.environ["APP_ID"],
-                    "identifier": md5_hash
+                    "identifier": md5_hash,
                 }
-                add_task_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=data)
+                add_task_result = nc_app.ocs(
+                    method="POST", path=add_task_ocs_url, json=data
+                )
                 # Accessing values by keys
                 for _, value in add_task_result.items():
-                    #print(f"\033[1;31moutput\033[0m {value['output']}", flush=True)
+                    # print(f"\033[1;31moutput\033[0m {value['output']}", flush=True)
                     summary += f" {value['output']}"
 
             summary = summary.lstrip(" \t")
@@ -300,11 +321,13 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
                                     """,
                         "type": task_type,
                         "appId": os.environ["APP_ID"],
-                        "identifier": md5_hash
+                        "identifier": md5_hash,
                     }
 
                     summary = ""
-                    add_task_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=data)
+                    add_task_result = nc_app.ocs(
+                        method="POST", path=add_task_ocs_url, json=data
+                    )
                     # Accessing values by keys
                     for _, value in add_task_result.items():
                         summary += f" {value['output']}"
@@ -336,14 +359,18 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
                                 """,
                     "type": task_type,
                     "appId": os.environ["APP_ID"],
-                    "identifier": md5_hash
+                    "identifier": md5_hash,
                 }
 
-                add_topic_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=topic_data)
+                add_topic_result = nc_app.ocs(
+                    method="POST", path=add_task_ocs_url, json=topic_data
+                )
                 # Accessing values by keys
-                topic_output=""
+                topic_output = ""
                 for _, value in add_topic_result.items():
-                    print(f"\033[1;31mTopic output\033[0m {value['output']}", flush=True)
+                    print(
+                        f"\033[1;31mTopic output\033[0m {value['output']}", flush=True
+                    )
                     topic_output += f" {value['output']}"
                 topics = re.sub(r"^[\t ]+", "", f"{topic_output}")
                 topics = process_topics(topics)
@@ -357,7 +384,9 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
                 # Finally - send the summarized message to the chat
                 msg = f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n*{summary}*"""
                 print(msg, flush=True)
-                SUMMARAI.send_message(f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n{summary}""", message)
+                SUMMARAI.send_message(
+                    f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n{summary}""", message
+                )
             else:
                 SUMMARAI.send_message(f"""\n**Summary:**\n{summary}""", message)
 
@@ -372,7 +401,7 @@ def summarai_talk_bot_process_request(message: talk_bot.TalkBotMessage, chat_mes
 
 def is_numbers_and_colon(s):
     for char in s:
-        if not (char.isdigit() or char == ':'):
+        if not (char.isdigit() or char == ":"):
             return False
     return True
 
@@ -380,7 +409,8 @@ def is_numbers_and_colon(s):
 def help_message(message, text):
     SUMMARAI.send_message(
         f"\n\n**{os.environ['APP_ID']}**:\n*{text}*\n\n**Commands:**\n```\nAdd a SummarAI job (The job will be executed daily at the same time):\n\t@{os.environ['APP_ID']} add <hour>:<minute>\n\nList scheduled SummarAI jobs:\n\t@{os.environ['APP_ID']} list\n\nDelete a SummarAI job:\n\t@{os.environ['APP_ID']} delete <job_id>\n\nPrints a help message:\n\t@{os.environ['APP_ID']} help\n```",
-        message)
+        message,
+    )
 
 
 @APP.post(f"/{os.environ['APP_ID']}")
@@ -388,8 +418,8 @@ async def summarai(
     message: Annotated[talk_bot.TalkBotMessage, Depends(atalk_bot_msg)],
     nc: Annotated[NextcloudApp, Depends(anc_app)],
 ):
-    conversation_token = getattr(message, 'conversation_token')
-    conversation_name = getattr(message, 'conversation_name')
+    conversation_token = getattr(message, "conversation_token")
+    conversation_name = getattr(message, "conversation_name")
     if message.object_content["message"].startswith(f"@{os.environ['APP_ID']} "):
         param = message.object_content["message"].split(" ")[1]
         #######
@@ -399,7 +429,9 @@ async def summarai(
         #######
 
         if param not in available_params:
-            text = "You gave me a command i don't understand, these are available commands"
+            text = (
+                "You gave me a command i don't understand, these are available commands"
+            )
             help_message(message, text)
             return Response()
         else:
@@ -409,11 +441,13 @@ async def summarai(
             # Check for parameters that arent times
             #
             #########
-            if param == 'add':
+            if param == "add":
                 hour_minute = message.object_content["message"].split(" ")[2]
 
                 if not is_numbers_and_colon(hour_minute):
-                    SUMMARAI.send_message(f"```Usage: @{os.environ['APP_ID']} <hour>:<minute>```", message)
+                    SUMMARAI.send_message(
+                        f"```Usage: @{os.environ['APP_ID']} <hour>:<minute>```", message
+                    )
                     return Response()
 
                 try:
@@ -432,7 +466,8 @@ async def summarai(
                         logging.error(f"Its not a valid time {hour}:{minute}:00")
                         SUMMARAI.send_message(
                             f"```Its not a valid time - please use @{os.environ['APP_ID']} hour:minute to schedule the bot for execution```",
-                            message)
+                            message,
+                        )
                         return Response()
 
                     # Parameters for the new job
@@ -451,9 +486,13 @@ async def summarai(
                         old_conversation_token = job.id.split("_")[0]
 
                         if isinstance(trigger, CronTrigger):
-                            job_hour = trigger.fields[trigger.FIELD_NAMES.index('hour')]
-                            job_minute = trigger.fields[trigger.FIELD_NAMES.index('minute')]
-                            job_day_of_week = trigger.fields[trigger.FIELD_NAMES.index('day_of_week')]
+                            job_hour = trigger.fields[trigger.FIELD_NAMES.index("hour")]
+                            job_minute = trigger.fields[
+                                trigger.FIELD_NAMES.index("minute")
+                            ]
+                            job_day_of_week = trigger.fields[
+                                trigger.FIELD_NAMES.index("day_of_week")
+                            ]
 
                             old_job_hash = f"{old_conversation_token}_{hashlib.md5(f'{old_conversation_token}_{conversation_name}_{job_hour}_{job_minute}'.encode()).hexdigest()}"
 
@@ -466,7 +505,10 @@ async def summarai(
                                 job_minute = int(f"{job_minute}")
 
                             if (
-                                    job_hour == new_job_hour and job_minute == new_job_minute and old_job_hash == new_job_hash):
+                                job_hour == new_job_hour
+                                and job_minute == new_job_minute
+                                and old_job_hash == new_job_hash
+                            ):
                                 job_exists = True
                                 break
 
@@ -479,7 +521,8 @@ async def summarai(
 
                         SUMMARAI.send_message(
                             f"```Skip - A {os.environ['APP_ID']} job already exists at {job_hour}:{job_minute}:00 for '{conversation_name}' with the id: {job.id}```",
-                            message)
+                            message,
+                        )
                         return Response()
 
                     ##########
@@ -488,50 +531,72 @@ async def summarai(
                     #
                     ##########
 
-                    scheduler.add_job(lambda: summarai_talk_bot_process_request(message=message, chat_messages=chat_log[conversation_token], conversation_name=conversation_name, conversation_token=conversation_token), 'cron', hour=hour,
-                                      minute=minute, day_of_week='*', id=job_hash)
+                    scheduler.add_job(
+                        lambda: summarai_talk_bot_process_request(
+                            message=message,
+                            chat_messages=chat_log[conversation_token],
+                            conversation_name=conversation_name,
+                            conversation_token=conversation_token,
+                        ),
+                        "cron",
+                        hour=hour,
+                        minute=minute,
+                        day_of_week="*",
+                        id=job_hash,
+                    )
                     if hour <= 9:
                         hour = f"0{hour}"
                     if minute <= 9:
                         minute = f"0{minute}"
                     SUMMARAI.send_message(
                         f"```New: Added a daily SummarAI task at {hour}:{minute}:00 for '{conversation_name}' with the id: {job_hash}```",
-                        message)
+                        message,
+                    )
                 except Exception as e:
                     logging.error(f"A error occured: {e}")
                     SUMMARAI.send_message(f"```Error {e}```", message)
 
-            elif param == 'list':
+            elif param == "list":
                 jobs = scheduler.get_jobs()
                 job_list = []
                 for idx, job in enumerate(jobs):
                     logging.info(f"Job ID: {job.id}, Next Run Time: {job}")
                     trigger = job.trigger
 
-                    job_hour = int(f"{trigger.fields[trigger.FIELD_NAMES.index('hour')].expressions[0]}")
+                    job_hour = int(
+                        f"{trigger.fields[trigger.FIELD_NAMES.index('hour')].expressions[0]}"
+                    )
                     if job_hour <= 9:
                         job_hour = f"0{job_hour}"
 
-                    job_minute = int(f"{trigger.fields[trigger.FIELD_NAMES.index('minute')].expressions[0]}")
+                    job_minute = int(
+                        f"{trigger.fields[trigger.FIELD_NAMES.index('minute')].expressions[0]}"
+                    )
                     if job_minute <= 9:
                         job_minute = f"0{job_minute}"
 
                     job_day_of_week = f"{trigger.fields[trigger.FIELD_NAMES.index('day_of_week')].expressions[0]}"
-                    if job_day_of_week == '*':
-                        job_day_of_week = 'Daily'
+                    if job_day_of_week == "*":
+                        job_day_of_week = "Daily"
 
                     if f"{job.id}".startswith(f"{conversation_token}_"):
-                        job_list.append(f"{idx + 1}. Job ID: {job.id} {job_hour}:{job_minute}:00 {job_day_of_week}")
+                        job_list.append(
+                            f"{idx + 1}. Job ID: {job.id} {job_hour}:{job_minute}:00 {job_day_of_week}"
+                        )
 
                 # Check if job_list is empty
                 if not job_list:
-                    job_list.append(f"No {os.environ['APP_ID']} job scheduled for '{conversation_name}'")
+                    job_list.append(
+                        f"No {os.environ['APP_ID']} job scheduled for '{conversation_name}'"
+                    )
 
-                job_list_str = '\n'.join(job_list)
+                job_list_str = "\n".join(job_list)
 
-                SUMMARAI.send_message(f"```Scheduled Jobs:\n{job_list_str}\n```", message)
+                SUMMARAI.send_message(
+                    f"```Scheduled Jobs:\n{job_list_str}\n```", message
+                )
 
-            elif param == 'delete':
+            elif param == "delete":
                 try:
                     job_id_to_delete = message.object_content["message"].split(" ")[2]
                 except:
@@ -540,14 +605,15 @@ async def summarai(
                 if not job_id_to_delete:
                     SUMMARAI.send_message(
                         f"```No Job ID to delete given - use '@{os.environ['APP_ID']} list' to get a list of scheduled job ids```",
-                        message)
+                        message,
+                    )
                     return Response()
 
                 #######
                 #
                 # Check if we are member of the room and therefore allowed to do it
                 # otherwise a scheduled job could be deleted from every other room
-                # 
+                #
                 #######
 
                 job_deleted = False
@@ -560,14 +626,18 @@ async def summarai(
                             job_deleted = True
                 else:
                     SUMMARAI.send_message(
-                        f"```You are not allowed to do that - you need to be member of the room```", message)
+                        f"```You are not allowed to do that - you need to be member of the room```",
+                        message,
+                    )
                     return Response()
 
                 if job_deleted:
-                    SUMMARAI.send_message(f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```",
-                                               message)
+                    SUMMARAI.send_message(
+                        f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```",
+                        message,
+                    )
                     return Response()
-            elif param == 'help':
+            elif param == "help":
                 text = "I am happy to help, these are commands you can use"
                 help_message(message, text)
                 return Response()
@@ -576,10 +646,13 @@ async def summarai(
                 help_message(message, text)
                 return Response()
 
-    elif (message.object_content["message"].startswith(f"@{os.environ['APP_ID']}") and message.object_content[
-        "message"].endswith(f"@{os.environ['APP_ID']}")) or (
-            message.object_content["message"].startswith(f"@{os.environ['APP_ID']} ") and message.object_content[
-        "message"].endswith(f"@{os.environ['APP_ID']} ")):
+    elif (
+        message.object_content["message"].startswith(f"@{os.environ['APP_ID']}")
+        and message.object_content["message"].endswith(f"@{os.environ['APP_ID']}")
+    ) or (
+        message.object_content["message"].startswith(f"@{os.environ['APP_ID']} ")
+        and message.object_content["message"].endswith(f"@{os.environ['APP_ID']} ")
+    ):
         text = "Hi! I am here and listening"
         help_message(message, text)
         return Response()
@@ -588,13 +661,17 @@ async def summarai(
             chat_log[conversation_token] = []
 
         current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         # Message will be structured like this
         # 2024-01-31 17:33:27 Participant 1 name: message
         chat_message = f'{current_datetime} {message.actor_display_name}: {message.object_content["message"]}'
         chat_log[conversation_token].append(chat_message)
 
-        print(f"\033[1;44mChat log:\033[0m\033[1;34m {conversation_token} - {conversation_name} \033[0m", chat_log[conversation_token], flush=True)
+        print(
+            f"\033[1;44mChat log:\033[0m\033[1;34m {conversation_token} - {conversation_name} \033[0m",
+            chat_log[conversation_token],
+            flush=True,
+        )
 
     return Response()
 
