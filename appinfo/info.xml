@@ -20,7 +20,7 @@
 	<external-app>
 		<docker-install>
 			<registry>ghcr.io</registry>
-			<image>cloud-py-api/summarai</image>
+			<image>nextcloud/summarai</image>
 			<image-tag>latest</image-tag>
 		</docker-install>
 		<scopes>
