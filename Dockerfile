@@ -2,10 +2,6 @@ FROM python:3.11-alpine
 
 COPY requirements.txt /
 
-ADD cs[s] /app/css
-ADD im[g] /app/img
-ADD j[s] /app/js
-ADD l10[n] /app/l10n
 ADD li[b] /app/lib
 
 RUN \

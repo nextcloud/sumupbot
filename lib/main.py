@@ -12,7 +12,7 @@
 #
 ############
 
-import datetime
+from datetime import datetime
 import hashlib
 import logging
 import os
@@ -120,6 +120,8 @@ def is_valid_time(hour, minute):
 def summarai_talk_bot_process_request(
     message: talk_bot.TalkBotMessage,
     chat_messages: list,
+    conversation_name: str,
+    conversation_token: str,
 ):
     nc_app = NextcloudApp()
 
@@ -216,12 +218,12 @@ def summarai_talk_bot_process_request(
             # Loop over the message in increments of chunk_size
             # as the limitation is somewhere of 4000 characters for a summary and the daily chat could me longer than that
             # we split the chat into chunks and create multiple summarize requests which responses we concatenate together in the end
-
+            # print(f"\033[1;43mMESSAGES\033[0m {messages}", flush=True)
             for i in range(0, len(messages), chunk_size):
                 # Slice the message from the current index i up to i + chunk_size
                 # message_chunk = f"Chatroom: {conversation_name} at {day} \n \n \n { messages[i:i + chunk_size] }"
                 message_chunk = f"{messages[i:i + chunk_size]}"
-
+                #print(f"\033[1;43m\tchunk {i}:\033[0m {message_chunk}", flush=True)
                 all_message_chunks += f"{messages[i:i + chunk_size]}\n"
                 # Create an MD5 hash object
                 hash_object = hashlib.md5()
@@ -254,9 +256,10 @@ def summarai_talk_bot_process_request(
                     "identifier": md5_hash,
                 }
                 add_task_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=data)
+                #print(f"\033[1;46m\tAdd task result\033[0m {add_task_result}", flush=True)
                 # Accessing values by keys
                 for _, value in add_task_result.items():
-                    # print(f"\033[1;31moutput\033[0m {value['output']}", flush=True)
+                    #print(f"\t\033[1;42mAdding Output\033[0m {value['output']}", flush=True)
                     summary += f" {value['output']}"
 
             summary = summary.lstrip(" \t")
@@ -346,7 +349,7 @@ def summarai_talk_bot_process_request(
             if topics:
                 # Finally - send the summarized message to the chat
                 msg = f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n*{summary}*"""
-                print(msg, flush=True)
+                #print(msg, flush=True)
                 SUMMARAI.send_message(f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n{summary}""", message)
             else:
                 SUMMARAI.send_message(f"""\n**Summary:**\n{summary}""", message)
@@ -483,6 +486,13 @@ async def summarai(
                     # Finally - Add the job with the conversation name (Name of the chatroom / Chat)
                     #
                     ##########
+                    
+                    if conversation_token not in chat_log.keys():
+                        SUMMARAI.send_message(
+                            f"```There was no conversation since i joined '{conversation_name}'```",
+                            message,
+                        )
+                        return Response()
 
                     scheduler.add_job(
                         lambda: summarai_talk_bot_process_request(
