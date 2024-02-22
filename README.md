@@ -11,11 +11,15 @@ How To Install
 
 2. Create a deployment daemon according to the [instructions](https://cloud-py-api.github.io/app_api/CreationOfDeployDaemon.html#create-deploy-daemon) of the AppPI
 
-  
 
-3. To deploy a docker image with Bot to docker.
+3. Build the docker image
+	Example assuming you are in the source directory of the cloned repository
 
-	Example assuming you are in the source directory of the bot:
+	> docker build --no-cache -f Dockerfile -t summarai:latest .  
+
+4. To deploy a docker image with Bot to docker.
+
+	Example assuming you are in the source directory of the cloned repository
 
 	> sudo docker run -ti -v
 	> -v /etc/localtime:/etc/localtime:ro -v
@@ -23,9 +27,10 @@ How To Install
 	> -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=1.0.0 -e 	NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p
 	> 9031:9031 summarai:latest
 
-4. Register the SummarAI Bot
+5. Register the SummarAI Bot
 
-	Example assuming you are in the source directory of the bot 
+	Example assuming you are in the source directory of the cloned repository
+
 	> (Hint: In both cases, registering manually or via makefile, adjust the json dictionary that it fits your environment/needs)
 	
 	**Register manually:**
