@@ -2,18 +2,22 @@
 <info>
 	<id>summarai</id>
 	<name>SummarAI</name>
-	<summary>Nextcloud chat summarize bot example</summary>
-	<description>
-	<![CDATA[Example of the Nextcloud chat summarize bot written in python]]>
-	</description>
+	<summary>SummarAI - Nextcloud Talk chat summarize bot</summary>
+	<description><![CDATA[# SummarAI - Talk chat summarize bot
+
+SummarAI is an innovative chat bot designed to enhance communication efficiency within the Nextcloud platform. This bot integrates seamlessly with Nextcloud&#x27;s chat feature, providing users with concise summaries of their conversations.
+
+Ideal for busy professionals or teams who deal with high volumes of messages, the bot uses advanced natural language processing techniques to analyze chat threads and extract the key points.
+
+This ensures that users can quickly grasp the essence of discussions without reading through every message, saving time and improving productivity. The bot is configurable, allowing scheduled intervals when to be executed.]]></description>
 	<version>1.0.0</version>
 	<licence>MIT</licence>
 	<author mail="florian.klinger@nextcloud.com" homepage="https://github.com/nc-fkl">Florian Klinger</author>
 	<namespace>SummarAI</namespace>
 	<category>tools</category>
-	<website>https://github.com/nextcloud/summarai</website>
-	<bugs>https://github.com/nextcloud/summarai/issues</bugs>
-	<repository type="git">https://github.com/nextcloud/summarai.git</repository>
+	<website>https://github.com/nextcloud/sumupbot</website>
+	<bugs>https://github.com/nextcloud/sumupbot/issues</bugs>
+	<repository type="git">https://github.com/nextcloud/sumupbot.git</repository>
 	<dependencies>
 		<nextcloud min-version="27" max-version="29"/>
 	</dependencies>
@@ -21,7 +25,7 @@
 		<docker-install>
 			<registry>ghcr.io</registry>
 			<image>nextcloud/summarai</image>
-			<image-tag>latest</image-tag>
+			<image-tag>1.0.0</image-tag>
 		</docker-install>
 		<scopes>
 			<value>TALK</value>
