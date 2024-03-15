@@ -132,7 +132,7 @@ def summarai_talk_bot_process_request(
     # member of the room to get the messages.
     # nc_app.users_list() just provides all users of the system - therefore not usable in this case
     # nc_app.set_user('<username_of_the_room_goes_here>')
-
+    
     # Define the path of the file
     print("\033[1;42mReceiving message...\033[0m", flush=True)
     try:
@@ -196,7 +196,7 @@ def summarai_talk_bot_process_request(
             c += 1
 
         if c == 0:
-            logging.info("The chatroom didnt had a converstation today")
+            logging.info(f"The chatroom {conversation_name} didnt had a converstation today or since {os.environ['APP_ID']} was enabled for this room")
             return None
 
         ##############
@@ -205,7 +205,7 @@ def summarai_talk_bot_process_request(
         #
         ##############
 
-        chunk_size = 2000
+        chunk_size = 3500
         try:
             add_task_endpoint = "/ocs/v2.php/textprocessing/schedule"
             add_task_ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{add_task_endpoint}'
@@ -266,6 +266,7 @@ def summarai_talk_bot_process_request(
 
             # check if the created summary exceeds the possible size, if yes we have to create another ai job to summarize the summary
             if len(messages) > chunk_size:
+                print("\t\033[1;33mSummarize the summary\033[0m")
                 try:
                     # Create an MD5 hash object
                     hash_object = hashlib.md5()
@@ -337,7 +338,7 @@ def summarai_talk_bot_process_request(
                 # Accessing values by keys
                 topic_output = ""
                 for _, value in add_topic_result.items():
-                    print(f"\033[1;31mTopic output\033[0m {value['output']}", flush=True)
+                    #print(f"\033[1;31mTopic output\033[0m {value['output']}", flush=True)
                     topic_output += f" {value['output']}"
                 topics = re.sub(r"^[\t ]+", "", f"{topic_output}")
                 topics = process_topics(topics)
@@ -622,11 +623,11 @@ async def summarai(
         chat_message = f'{current_datetime} {message.actor_display_name}: {message.object_content["message"]}'
         chat_log[conversation_token].append(chat_message)
 
-        print(
-            f"\033[1;44mChat log:\033[0m\033[1;34m {conversation_token} - {conversation_name} \033[0m",
-            chat_log[conversation_token],
-            flush=True,
-        )
+        #print(
+        #    f"\033[1;44mChat log:\033[0m\033[1;34m {conversation_token} - {conversation_name} \033[0m",
+        #    chat_log[conversation_token],
+        #    flush=True,
+        #)
 
     return Response()
 
