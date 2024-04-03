@@ -40,8 +40,11 @@ How To Install
 	
 	*Example assuming you are in the source directory of your nextcloud instance where occ is located and the default user www-data got execution rights on occ*
 
+    *Unregistering SummarAI*
 	> sudo -u www-data php ./occ app_api:app:unregister summarai
-	> sudo -u www-data php ./occ app_api:app:register summarai manual_install --json-info "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"host\":\"192.168.0.199\",\"port\":9031, \"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"TEXT_PROCESSING\"],\"protocol\":\"http\",\"system\":1}" --force-scopes --wait-finish
+
+    *Registering SummarAI:*
+	> sudo -u www-data php ./occ app_api:app:register summarai manual_install --json-info '{ "id": "summarai", "name": "SummarAI", "daemon_config_name": "manual_install", "version": "1.0.0", "secret": "12345", "host": "192.168.0.199", "port": 9031, "scopes": ["AI_PROVIDERS", "NOTIFICATIONS", "TALK", "TALK_BOT", "TEXT_PROCESSING"], "protocol": "http", "system": 1}' --force-scopes --wait-finish
 
 	**OR**
 
