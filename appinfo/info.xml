@@ -32,7 +32,8 @@ This ensures that users can quickly grasp the essence of discussions without rea
 			<value>TALK_BOT</value>
 			<value>AI_PROVIDERS</value>
 			<value>NOTIFICATIONS</value>
+			<value>TEXT_PROCESSING</value>
 		</scopes>
-		<system>false</system>
+		<system>true</system>
 	</external-app>
 </info>
