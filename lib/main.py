@@ -317,7 +317,8 @@ def summarai_talk_bot_process_request(
                 # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
                 topic_data = {
                     "input": f"""  You are tasked with providing an insightful and succint summarization in topics of a summary.
-                                    The topics should be seperated in new lines, each line should begin with a trailing dash
+                                    The topics should be seperated in new lines, each line should begin with a trailing dash.
+                                    Each topic should be very short and consist of a maximum of 8 words.
                                     The summary will be provided to you below contained within the following tags:
                                     ***CHAT_LOG_START***
                                     and
@@ -326,8 +327,8 @@ def summarai_talk_bot_process_request(
                                     ***CHAT_LOG_START***
                                     {summary}
                                     ***CHAT_LOG_END***
-                                    Now, please provide an insighful topics of the summary.
-                                    Please, do not leave out any important topics! The topics should be seperated in new lines.
+                                    Now, please provide an insighful topics of the summary with maximum 8 words for each topic.
+                                    Please, do not leave out any important topics! The topics should be seperated in new lines and consist of maximum 8 words for each topic.
                                 """,
                     "type": task_type,
                     "appId": os.environ["APP_ID"],
