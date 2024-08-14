@@ -22,27 +22,27 @@ help:
 .PHONY: build-push
 build-push:
 	docker login ghcr.io
-	docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag ghcr.io/nextcloud/summarai:1.0.0 .
+	docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag ghcr.io/cloud-py-api/summarai:1.0.0 .
 
 .PHONY: run
 run:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister summarai --silent || true
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register summarai docker_dev --json-info \
-  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\", \"TEXT_PROCESSING\"],\"system\":1}" \
+  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\", \"TEXT_PROCESSING\"]}" \
   --force-scopes --wait-finish
 
 .PHONY: run27
 run27:
-	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:unregister summarai --silent || true
-	docker exec master-stable27-1 sudo -u www-data php occ app_api:app:register summarai manual_install --json-info \
-  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\", \"TEXT_PROCESSING\"],\"system\":1}" \
+	docker exec master-stable30-1 sudo -u www-data php occ app_api:app:unregister summarai --silent || true
+	docker exec master-stable30-1 sudo -u www-data php occ app_api:app:register summarai manual_install --json-info \
+  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\", \"TEXT_PROCESSING\"]}" \
   --force-scopes --wait-finish
 
 .PHONY: register
 register:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister summarai --silent || true
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register summarai manual_install --json-info \
-  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\", \"TEXT_PROCESSING\"],\"system\":1}" \
+  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"manual_install\",\"version\":\"1.0.0\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"SYSTEM\", \"TEXT_PROCESSING\"]}" \
   --force-scopes --wait-finish
 
 .PHONY: register_local

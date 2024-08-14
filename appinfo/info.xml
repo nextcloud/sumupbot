@@ -19,12 +19,12 @@ This ensures that users can quickly grasp the essence of discussions without rea
 	<bugs>https://github.com/nextcloud/sumupbot/issues</bugs>
 	<repository type="git">https://github.com/nextcloud/sumupbot.git</repository>
 	<dependencies>
-		<nextcloud min-version="27" max-version="29"/>
+		<nextcloud min-version="30" max-version="30"/>
 	</dependencies>
 	<external-app>
 		<docker-install>
 			<registry>ghcr.io</registry>
-			<image>nextcloud/summarai</image>
+			<image>cloud-py-api/summarai</image>
 			<image-tag>1.0.0</image-tag>
 		</docker-install>
 		<scopes>
@@ -34,6 +34,5 @@ This ensures that users can quickly grasp the essence of discussions without rea
 			<value>NOTIFICATIONS</value>
 			<value>TEXT_PROCESSING</value>
 		</scopes>
-		<system>true</system>
 	</external-app>
 </info>
