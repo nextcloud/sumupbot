@@ -18,7 +18,7 @@ How To Install
 
 3.1.1 Run the docker image provided by the registry server
 
-	> sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summarai -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=1.0.0 -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/summarai:latest
+	> sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summarai -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=<APP_VERSION> -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/summarai:latest
 
 3.2.1 **OR**: Build the docker image locally
 
@@ -30,7 +30,7 @@ How To Install
 
 	Example assuming you are in the source directory of the cloned repository
 
-	> sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summarai -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=1.0.0 -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/summarai:latest
+	> sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summarai -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=<APP_VERSION> -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/summarai:latest
 
 4. Register the SummarAI Bot
 
@@ -44,7 +44,7 @@ How To Install
 	> sudo -u www-data php ./occ app_api:app:unregister summarai
 
     *Registering SummarAI:*
-	> sudo -u www-data php ./occ app_api:app:register summarai manual_install --json-info '{ "id": "summarai", "name": "SummarAI", "daemon_config_name": "manual_install", "version": "1.0.0", "secret": "12345", "host": "192.168.0.199", "port": 9031, "scopes": ["AI_PROVIDERS", "NOTIFICATIONS", "TALK", "TALK_BOT", "TEXT_PROCESSING"], "protocol": "http", "system": 1}' --force-scopes --wait-finish
+	> sudo -u www-data php ./occ app_api:app:register summarai manual_install --json-info '{ "id": "summarai", "name": "SummarAI", "daemon_config_name": "manual_install", "version": "<APP_VERSION>", "secret": "12345", "host": "192.168.0.199", "port": 9031, "scopes": ["AI_PROVIDERS", "TALK", "TALK_BOT"], "protocol": "http"}' --force-scopes --wait-finish
 
 	**OR**
 

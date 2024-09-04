@@ -1,2 +1,4 @@
-nc_py_api[app]>=0.10.0
-apscheduler>=3.10.4
+nc_py_api[app]>=0.16.0
+apscheduler==3.10.4
+timelength==2.0.5
+peewee==3.17.6
