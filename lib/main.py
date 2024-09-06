@@ -61,7 +61,7 @@ APP = FastAPI(lifespan=lifespan)
 SUMMARAI = talk_bot.TalkBot(
     f"/{os.environ['APP_ID']}",
     f"{os.environ['APP_DISPLAY_NAME']}",
-    f"For usage instructions, type: @{os.environ['APP_ID']} help",
+    "For usage instructions, type: @summary help",
 )
 
 SUMMARY_TEMPLATE = """You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
@@ -287,22 +287,22 @@ def help_message(message, text):
 **Commands:**
 ```
 Create a summary from last 24 hours of chat messages:
-    @{os.environ['APP_ID']}
+    @summary
 
 Create a summary from last provided duration of chat messages ("30m" for 30 minutes, "3h40m" for 3 hours and 40 minutes, "1d" for 1 day):
-    @{os.environ['APP_ID']} <duration>
+    @summary <duration>
 
 Add a SummarAI job (The job will be executed daily at the same time, in 24-hour format):
-    @{os.environ['APP_ID']} add <hour>:<minute>
+    @summary add <hour>:<minute>
 
 List scheduled SummarAI jobs:
-    @{os.environ['APP_ID']} list
+    @summary list
 
 Delete a SummarAI job:
-    @{os.environ['APP_ID']} delete <job_id>
+    @summary delete <job_id>
 
 Prints a help message:
-    @{os.environ['APP_ID']} help
+    @summary help
 ```
 """, # noqa: E501
         message,
@@ -383,11 +383,11 @@ def handle_command(message: talk_bot.TalkBotMessage):
     conversation_token = message.conversation_token
     conversation_name = message.conversation_name
 
-    if message.object_content["message"].strip() == f"@{os.environ['APP_ID']}":
+    if message.object_content["message"].strip() == f"@summary":
         # Create a summary from last 24 hours of chat messages
         SUMMARAI.send_message("```Creating a summary from last 24 hours of chat messages```", message)
         last_x_duration_process(message)
-    elif message.object_content["message"].startswith(f"@{os.environ['APP_ID']} "):
+    elif message.object_content["message"].startswith(f"@summary "):
         param = message.object_content["message"].split(" ")[1]
         if param not in available_params:
             if TimeLength(param).result.success:
@@ -413,7 +413,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
             hour_minute = message.object_content["message"].split(" ")[2]
 
             if not is_numbers_and_colon(hour_minute):
-                SUMMARAI.send_message(f"```Usage: @{os.environ['APP_ID']} <hour>:<minute>```", message)
+                SUMMARAI.send_message(f"```Usage: @summary <hour>:<minute>```", message)
                 return
 
             try:
@@ -428,7 +428,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
                 if not is_valid_time(hour, minute):
                     SUMMARAI.send_message(
-                        f"```Its not a valid time - please use @{os.environ['APP_ID']} hour:minute to schedule the"
+                        f"```Its not a valid time - please use @summary hour:minute to schedule the"
                         " bot for execution```",
                         message,
                     )
@@ -553,7 +553,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
             if not job_id_to_delete:
                 SUMMARAI.send_message(
-                    f"```No Job ID to delete given - use '@{os.environ['APP_ID']} list' to get a list of scheduled"
+                    f"```No Job ID to delete given - use '@summary list' to get a list of scheduled"
                     " job ids```",
                     message,
                 )
@@ -596,7 +596,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 async def summarai(
     message: Annotated[talk_bot.TalkBotMessage, Depends(atalk_bot_msg)],
 ):
-    bot_mention_regex = re.compile(f"^@{os.environ['APP_ID']}$|^@{os.environ['APP_ID']}\\s.*", re.IGNORECASE)
+    bot_mention_regex = re.compile(f"^@summary$|^@summary\\s.*", re.IGNORECASE)
     # store the message if its not a command
     if (
         message.message_type != "Create"
