@@ -1,4 +1,4 @@
-"""SummarAI Talk Bot"""
+"""Summary Talk Bot"""
 
 import hashlib
 import logging
@@ -28,7 +28,7 @@ from timelength import TimeLength
 #### For local dev purposes
 # os.environ["APP_HOST"] = "0.0.0.0"
 # os.environ["APP_ID"] = "summarai"
-# os.environ["APP_DISPLAY_NAME"] = "SummarAI"
+# os.environ["APP_DISPLAY_NAME"] = "Summary Bot"
 # os.environ["APP_PORT"] = "9031"
 # os.environ["APP_SECRET"] = "12345"
 # os.environ["APP_VERSION"] = "1.0.0"
@@ -281,7 +281,7 @@ def is_numbers_and_colon(s: str):
 
 def help_message(message, text):
     SUMMARAI.send_message(f"""
-**SummarAI**:
+**{os.environ["APP_DISPLAY_NAME"]}**:
 *{text}*
 
 **Commands:**
@@ -292,13 +292,13 @@ Create a summary from last 24 hours of chat messages:
 Create a summary from last provided duration of chat messages ("30m" for 30 minutes, "3h40m" for 3 hours and 40 minutes, "1d" for 1 day):
     @summary <duration>
 
-Add a SummarAI job (The job will be executed daily at the same time, in 24-hour format):
+Add a {os.environ["APP_DISPLAY_NAME"]} job (The job will be executed daily at the same time, in 24-hour format):
     @summary add <hour>:<minute>
 
-List scheduled SummarAI jobs:
+List scheduled {os.environ["APP_DISPLAY_NAME"]} jobs:
     @summary list
 
-Delete a SummarAI job:
+Delete a {os.environ["APP_DISPLAY_NAME"]} job:
     @summary delete <job_id>
 
 Prints a help message:
@@ -413,7 +413,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
             hour_minute = message.object_content["message"].split(" ")[2]
 
             if not is_numbers_and_colon(hour_minute):
-                SUMMARAI.send_message(f"```Usage: @summary <hour>:<minute>```", message)
+                SUMMARAI.send_message("```Usage: @summary <hour>:<minute>```", message)
                 return
 
             try:
@@ -428,7 +428,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
                 if not is_valid_time(hour, minute):
                     SUMMARAI.send_message(
-                        f"```Its not a valid time - please use @summary hour:minute to schedule the"
+                        "```Its not a valid time - please use @summary hour:minute to schedule the"
                         " bot for execution```",
                         message,
                     )
@@ -483,7 +483,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
                         return
 
                     SUMMARAI.send_message(
-                        f"```Skip - A {os.environ['APP_ID']} job already exists at {job_hour}:{job_minute}:00 for"
+                        f"```Skip - A {os.environ['APP_DISPLAY_NAME']} job already exists at {job_hour}:{job_minute}:00 for"
                         f" '{conversation_name}'```",
                         message,
                     )
@@ -508,7 +508,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
                 if minute <= 9:
                     minute = f"0{minute}"
                 SUMMARAI.send_message(
-                    f"```New: Added a daily SummarAI task at {hour}:{minute}:00 for '{conversation_name}' with the"
+                    f"```New: Added a daily {os.environ["APP_DISPLAY_NAME"]} task at {hour}:{minute}:00 for '{conversation_name}' with the"
                     f" id: {job_hash}```",
                     message,
                 )
@@ -519,7 +519,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
             jobs = scheduler.get_jobs()
             job_list = []
             for idx, job in enumerate(jobs):
-                logging.info(f"Job ID: {job.id}, Next Run Time: {job}")
+                logging.info("Job ID: %s, Next Run Time: %s", job.id, job.next_run_time)
                 trigger = job.trigger
 
                 job_hour = int(f"{trigger.fields[trigger.FIELD_NAMES.index('hour')].expressions[0]}")
@@ -553,7 +553,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
             if not job_id_to_delete:
                 SUMMARAI.send_message(
-                    f"```No Job ID to delete given - use '@summary list' to get a list of scheduled"
+                    "```No Job ID to delete given - use '@summary list' to get a list of scheduled"
                     " job ids```",
                     message,
                 )
@@ -596,7 +596,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 async def summarai(
     message: Annotated[talk_bot.TalkBotMessage, Depends(atalk_bot_msg)],
 ):
-    bot_mention_regex = re.compile(f"^@summary$|^@summary\\s.*", re.IGNORECASE)
+    bot_mention_regex = re.compile("^@summary$|^@summary\\s.*", re.IGNORECASE)
     # store the message if its not a command
     if (
         message.message_type != "Create"

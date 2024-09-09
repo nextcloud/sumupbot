@@ -4,19 +4,19 @@ APP_VERSION := 1.1.0
 
 .PHONY: help
 help:
-	@echo "Welcome to SummarAI bot. Please use \`make <target>\` where <target> is one of"
+	@echo "Welcome to Summary Bot. Please use \`make <target>\` where <target> is one of"
 	@echo " "
 	@echo "  Next commands are only for dev environment with nextcloud-docker-dev!"
 	@echo "  They should run from the host you are developing on(with activated venv) and not in the container with Nextcloud!"
 	@echo "  "
 	@echo "  build-push        build image and upload to ghcr.io"
 	@echo "  "
-	@echo "  run               install SummarAI for Nextcloud Last"
+	@echo "  run               install Summary Bot for Nextcloud Last"
 	@echo "  "
 	@echo "  For development of this example use PyCharm run configurations. Development is always set for last Nextcloud."
-	@echo "  First run 'SummarAI' and then 'make register', after that you can use/debug/develop it and easy test."
+	@echo "  First run 'Summary Bot' and then 'make register', after that you can use/debug/develop it and easy test."
 	@echo "  "
-	@echo "  register          perform registration of running 'SummarAI' into the 'manual_install' deploy daemon."
+	@echo "  register          perform registration of running 'Summary Bot' into the 'manual_install' deploy daemon."
 
 .PHONY: build-push
 build-push:
@@ -27,12 +27,12 @@ build-push:
 run:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister summarai --silent || true
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register summarai docker_dev --json-info \
-  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"docker_dev\",\"version\":\"$(APP_VERSION)\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"NOTIFICATIONS\", \"TALK\", \"TALK_BOT\", \"USER_INFO\", \"TEXT_PROCESSING\"]}" \
+  "{\"id\":\"summarai\",\"name\":\"Summary Bot\",\"daemon_config_name\":\"docker_dev\",\"version\":\"$(APP_VERSION)\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"TALK\", \"TALK_BOT\"]}" \
   --force-scopes --wait-finish
 
 .PHONY: register
 register:
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:unregister summarai --silent || true
 	docker exec master-nextcloud-1 sudo -u www-data php occ app_api:app:register summarai manual_install --json-info \
-  "{\"id\":\"summarai\",\"name\":\"SummarAI\",\"daemon_config_name\":\"manual_install\",\"version\":\"$(APP_VERSION)\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"TALK\", \"TALK_BOT\"]}" \
+  "{\"id\":\"summarai\",\"name\":\"Summary Bot\",\"daemon_config_name\":\"manual_install\",\"version\":\"$(APP_VERSION)\",\"secret\":\"12345\",\"port\":9031,\"scopes\":[\"AI_PROVIDERS\", \"TALK\", \"TALK_BOT\"]}" \
   --force-scopes --wait-finish
