@@ -24,7 +24,7 @@ This ensures that users can quickly grasp the essence of discussions without rea
 	<external-app>
 		<docker-install>
 			<registry>ghcr.io</registry>
-			<image>nextcloud/summarai</image>
+			<image>nextcloud/sumupbot</image>
 			<image-tag>1.1.0</image-tag>
 		</docker-install>
 		<scopes>

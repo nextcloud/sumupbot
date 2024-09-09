@@ -21,7 +21,7 @@ help:
 .PHONY: build-push
 build-push:
 	docker login ghcr.io
-	docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag ghcr.io/cloud-py-api/summarai:$(APP_VERSION) --tag ghcr.io/cloud-py-api/summarai:latest .
+	docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag ghcr.io/nextcloud/sumupbot:$(APP_VERSION) --tag ghcr.io/nextcloud/sumupbot:latest .
 
 .PHONY: run
 run:
