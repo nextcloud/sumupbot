@@ -1,54 +1,51 @@
-"""Example of an application(SummarAI) that uses Talk Bot APIs."""
+"""Summary Talk Bot"""
 
-############
-#
-# Talk Bot App with Transformers
-#
-# https://cloud-py-api.github.io/nc_py_api/NextcloudTalkBotTransformers.html
-#
-#
-# Run: text-generation-webui to generate a api access to 127.0.0.1:5000 which will be used as input for summary
-#
-#
-############
-
-from datetime import datetime
 import hashlib
 import logging
 import os
 import re
+import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from typing import Annotated
 
+import tzlocal
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.cron.fields import BaseField
 from fastapi import Depends, FastAPI, Response
-from nc_py_api import NextcloudApp, talk_bot
+from nc_py_api import Nextcloud, NextcloudApp, talk_bot
 from nc_py_api.ex_app import (
-    AppAPIAuthMiddleware,
-    anc_app,
     atalk_bot_msg,
     run_app,
     set_handlers,
+    setup_nextcloud_logging,
 )
+from timelength import TimeLength
 
 #### For local dev purposes
-#
 # os.environ["APP_HOST"] = "0.0.0.0"
 # os.environ["APP_ID"] = "summarai"
-# os.environ["APP_PORT"] = "9032"
+# os.environ["APP_DISPLAY_NAME"] = "Summary Bot"
+# os.environ["APP_PORT"] = "9031"
 # os.environ["APP_SECRET"] = "12345"
 # os.environ["APP_VERSION"] = "1.0.0"
-# os.environ["NEXTCLOUD_URL"] = "http://localhost/nc_beta28"
+# os.environ["NEXTCLOUD_URL"] = "http://nextcloud.local"
 # os.environ["APP_PERSISTENT_STORAGE"] = "/tmp/"
 
+# Imported here to register environment variables before importing store (only for local dev purposes)
+import store
+
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.WARNING,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
-logging.getLogger("apscheduler").setLevel(logging.DEBUG)
-
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+logger = logging.getLogger(os.environ["APP_ID"])
+logger.setLevel(logging.DEBUG)
+setup_nextcloud_logging(os.environ["APP_ID"], logging.WARNING)
 
 # The same stuff as for usual External Applications
 @asynccontextmanager
@@ -58,73 +55,127 @@ async def lifespan(app: FastAPI):
 
 
 APP = FastAPI(lifespan=lifespan)
-APP.add_middleware(AppAPIAuthMiddleware)
 
 # We define bot globally, so if no `multiprocessing` module is used, it can be reused by calls.
 # All stuff in it works only with local variables, so in the case of multithreading, there should not be problems.
 SUMMARAI = talk_bot.TalkBot(
     f"/{os.environ['APP_ID']}",
-    f"{os.environ['APP_ID'].capitalize()}",
-    f"Usage: @{os.environ['APP_ID']} add <daily execution time - eg. 17:00> / @{os.environ['APP_ID']} list /"
-    f" @{os.environ['APP_ID']} delete <job_id> / @{os.environ['APP_ID']} help",
+    f"{os.environ['APP_DISPLAY_NAME']}",
+    "For usage instructions, type: @summary help",
 )
+
+SUMMARY_TEMPLATE = """You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
+The chat log will be provided to you below will be defined in an XML format inside triple single quotes.
+Each message will be encapsulated in a <msg> tag, with the following subtags:
+<ts> for the timestamp of the message
+<at> for the name of the participant
+<cnt> for the message content
+
+Here is the chat log from the room called "{conversation_name}" that you should summarize, do not mention the room explicitly:
+
+'''
+{messages}
+'''
+
+
+Now, please provide an insighful summary of the provided chat log and use human-readable time references for time related information.
+Use bullet points to list the most important facts and keep the summary concise and readable in roughly 30 seconds.
+""" # noqa: E501
+
+PROMPT_WINDOW = 16_000 - 4_000
+"""Most models (proprietory and local) have an effective context length of 16000 tokens. We leave 4000 tokens for the
+generated summary and 12000 tokens for the context."""
+
+MAX_WORDS = int(PROMPT_WINDOW // 1.5)
+"""Taking 1 word ~ 1.5 tokens to be on the safe side for languages other than English"""
+
+MAX_CHARACTERS = MAX_WORDS * 5
+
 
 scheduler = BackgroundScheduler()
 scheduler.start()
 
+# We need to use ThreadPoolExecutor for message store and taskproc API calls
+executor = ThreadPoolExecutor(max_workers=10)
+
+
 available_params = ["add", "list", "delete", "help"]
-chat_log = {}
 
 
-def task_type_available(json_data, task_type_id):
-    return any(type_info["id"] == task_type_id for type_info in json_data["types"])
-
-
-def process_topics(input_string):
-    # Split the string into lines
-    lines = input_string.split("\n")
-    processed_lines = []
-
-    for line in lines:
-        # Remove leading and trailing whitespace
-        trimmed_line = line.strip()
-        # Check if the line is not empty
-        if trimmed_line:
-            # Ensure the line starts with "- *", even if it already starts with "-" or "*"
-            if not trimmed_line.startswith("- *"):
-                # If it starts with "-", directly add "*", else add "- *"
-                if trimmed_line.startswith("-"):
-                    # Ensure not to duplicate "*"
-                    if not trimmed_line.startswith("- *"):
-                        trimmed_line = f"- *{trimmed_line[2:]}"
-                elif trimmed_line.startswith("*"):
-                    trimmed_line = f"- {trimmed_line}"
-                else:
-                    trimmed_line = f"- *{trimmed_line}"
-            # Remove trailing space or tab before "*"
-            trimmed_line = re.sub(r"[\t ]+\*$", "*", trimmed_line)
-            # Ensure the line ends with "*", if it does not already
-            if not trimmed_line.endswith("*"):
-                trimmed_line += "*"
-        processed_lines.append(trimmed_line)
-
-    # Join the processed lines back into a single string
-    return "\n".join(processed_lines)
+def error_handler(custom_err_msg: str, message: talk_bot.TalkBotMessage | None = None):
+    logger.error("An error occurred: %s", custom_err_msg)
+    traceback.print_exc()
+    if message:
+        SUMMARAI.send_message(f"```{custom_err_msg}```", message)
 
 
 def is_valid_time(hour, minute):
     return bool(0 <= hour <= 23 and 0 <= minute <= 59)
 
 
-# def summarize_talk_bot_process_request(message: talk_bot.TalkBotMessage):
-def summarai_talk_bot_process_request(
-    message: talk_bot.TalkBotMessage,
-    chat_messages: list,
-    conversation_name: str,
-    conversation_token: str,
-):
-    nc_app = NextcloudApp()
+def is_task_type_available():
+    try:
+        nc = Nextcloud()
+        tasktype_result = nc.ocs(method="GET", path="/ocs/v2.php/taskprocessing/tasktypes")
+    except Exception as e:
+        logging.error(f"An error occurred while fetching the list of available tasktypes: {e}")
+        return False
 
+    # Check for the specific task type ID
+    task_type = "core:text2text"
+    if not isinstance(tasktype_result, dict) or task_type not in tasktype_result.get("types", {}):
+        logging.error(f"The neccessary task type: {task_type} is not available")
+        return False
+
+    return True
+
+
+def validate_task_response(response) -> dict:
+    if not isinstance(response, dict) or "task" not in response:
+        raise Exception("Failed to create Nextcloud TaskProcessing task")
+
+    task = response["task"]
+
+    if not isinstance(task, dict) or "id" not in task or "status" not in task or "output" not in task:
+        raise Exception("Invalid Nextcloud TaskProcessing task response")
+
+    return task
+
+
+def ocs_get_summary(messages_str: str, conversation_name: str) -> str:
+    nc = Nextcloud()
+    prompt = SUMMARY_TEMPLATE.format(messages=messages_str, conversation_name=conversation_name)
+    response = nc.ocs(
+        "POST",
+        "/ocs/v2.php/taskprocessing/schedule",
+        json={"type": "core:text2text", "appId": os.environ["APP_ID"], "input": {"input": prompt}},
+    )
+
+    try:
+        task = validate_task_response(response)
+        logger.debug("Task with ID %s created", task["id"])
+
+        i = 0
+        # wait for 30 minutes
+        while task["status"] != "STATUS_SUCCESSFUL" and task["status"] != "STATUS_FAILED" and i < 60 * 6:
+            time.sleep(5)
+            i += 1
+            response = nc.ocs("GET", f"/ocs/v2.php/taskprocessing/task/{task['id']}")
+            task = validate_task_response(response)
+            logger.debug("Task (%s) status: %s", task["id"], task["status"])
+    except Exception as e:
+        raise Exception("Failed to create Nextcloud TaskProcessing task") from e
+
+    if task["status"] != "STATUS_SUCCESSFUL":
+        raise Exception("Nextcloud TaskProcessing Task failed: " + task["status"])
+
+    if "output" not in task or "output" not in task["output"]:
+        raise Exception("No output in Nextcloud TaskProcessing task")
+
+    return task["output"]["output"]
+
+
+def sched_process_request(message: talk_bot.TalkBotMessage, job_hash: str):
     # set_user needed for accessing the Talk API to get all messages
     # waiting for https://github.com/nextcloud/spreed/issues/10401 as
     # talk api doesnt provide the feature to get the participants of a room
@@ -132,505 +183,430 @@ def summarai_talk_bot_process_request(
     # member of the room to get the messages.
     # nc_app.users_list() just provides all users of the system - therefore not usable in this case
     # nc_app.set_user('<username_of_the_room_goes_here>')
-    
-    # Define the path of the file
-    print("\033[1;42mReceiving message...\033[0m", flush=True)
+
+    logger.debug(f"\033[1;42mProcessing request ({job_hash})...\033[0m")
+
+    ##############
+    #
+    # 1. Get Chat messages of the chatroom
+    #
+    ##############
+    # messages = nc_app.talk.receive_messages(conversation_token, limit=200)
+    # as this doesnt work because of missing capability in TalkAPI (https://github.com/nextcloud/spreed/issues/10401)
+    #   we need to use the created array for chat_logs
+
+    ##############
+    #
+    # 2. Schedule a task with taskprocessing-api via OCS. This API uses POST requests so we don't need to limit the
+    #    messages characters, or fear a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
+    #
+    ##############
+    last_x_duration_process(message, "1d")
+
+
+def get_ctx_limited_messages(chat_messages: list[store.ChatMessages]) -> tuple[str, str | None]:
+    """Get the last messages that fit into the context window of the model.
+        The second return is the cut-off datetime of the messages.
+    """
+
+    msgs = ""
+    length = 0
+    cutoff = None
+
+    for i in range(len(chat_messages) - 1, -1, -1):
+        msg = format_message(chat_messages[i])
+        if (length := length + len(msg)) > MAX_CHARACTERS:
+            cutoff = str(chat_messages[max(0, i-1)].timestamp)
+            break
+
+        msgs = msg + "\n" + msgs
+
+    if not msgs:
+        return str(chat_messages[0]), None
+
+    return msgs, cutoff
+
+
+def last_x_duration_process(message: talk_bot.TalkBotMessage, hduration: str = "1d"):
+    if not is_task_type_available():
+        SUMMARAI.send_message("```The required task type to generate the summary is not available```", message)
+        return
+
+    timelength_res = TimeLength(hduration)
+    if not timelength_res.result.success:
+        help_message(
+            message,
+            "Invalid duration format. Please use '30m' for 30 minutes, '3h40m' for 3 hours and "
+            "40 minutes, '1d' for 1 day",
+        )
+        return
+
+    duration = timedelta(seconds=timelength_res.to_seconds(max_precision=0))
+    current_time = datetime.now()
+    start_time = current_time - duration
+    start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
     try:
-        if len(chat_messages) == 0:
-            print("No message received...", flush=True)
-            return None
+        # Get the chat messages from the database
+        chat_messages = store.ChatMessages \
+            .select() \
+            .where(store.ChatMessages.room_id == message.conversation_token) \
+            .where(store.ChatMessages.timestamp >= start_time_str)
 
-        ##############
-        #
-        # 1. Check for availbale task type
-        #
-        ##############
-        try:
-            tasktype_endpoint = "/ocs/v2.php/textprocessing/tasktypes"
-            tasktype_result: dict = nc_app.ocs(method="GET", path=tasktype_endpoint)
-        except Exception as e:
-            logging.error(f"An error occurred while checking {tasktype_endpoint}: {e}")
-            return None
+        if chat_messages.count() == 0:
+            SUMMARAI.send_message(f"There was no conversation since i joined '{message.conversation_name}'", message)
+            return
+    except Exception:
+        error_handler("Error occured while fetching the messages from the database", message)
+        return
 
-        # Check for the specific task type ID
-        task_type = "OCP\\TextProcessing\\SummaryTaskType"
-        is_available = task_type_available(tasktype_result, task_type)
-        if not is_available:
-            logging.error(f"The neccessary task type: {task_type} is not available")
-            return Response()
-
-        ##############
-        #
-        # 2. Get Chat messages of the chatroom
-        #
-        ##############
-        # chat_messages = nc_app.talk.receive_messages(conversation_token, limit=200)
-        # as this doesnt work because of missing capability in TalkAPI ( https://github.com/nextcloud/spreed/issues/10401 ) we need to use the created array for chat_logs
-
-        ##############
-        #
-        # 3. Prepare the messages in a format thats good for summarizing
-        #
-        ##############
-        # Go through all the received chat messages and get only the messages of the current day
-        # Skip all messages from bots, so that only user messages will be used for a summary
-
-        day = datetime.today()
-        skipper = [
-            f"@{os.environ['APP_ID']} ",
-            f"@{os.environ['APP_ID']}",
-        ]
-
-        c = 0
-        messages = f"{day}"
-        for el in chat_messages:
-            date_str = el.split(" ")[0]
-            time_str = el.split(" ")[1]
-            username = el.split(" ")[2]
-            dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
-            if dt.date() != day.date() or any(username.startswith(pattern) for pattern in skipper):
-                continue
-
-            msg = f"{el}"
-            messages = f"{msg}\n\n" + f"{messages}"
-            c += 1
-
-        if c == 0:
-            logging.info(f"The chatroom {conversation_name} didnt had a converstation today or since {os.environ['APP_ID']} was enabled for this room")
-            return None
-
-        ##############
-        #
-        # 4. Schedule a task with textprocessing-api via OCS
-        #
-        ##############
-
-        chunk_size = 3500
-        try:
-            add_task_endpoint = "/ocs/v2.php/textprocessing/schedule"
-            add_task_ocs_url = f'{os.environ["NEXTCLOUD_URL"]}{add_task_endpoint}'
-            # Ensure the message is a string
-            messages = str(messages)
-
-            summary = ""
-            all_messages = ""
-            all_message_chunks = ""
-            # Loop over the message in increments of chunk_size
-            # as the limitation is somewhere of 4000 characters for a summary and the daily chat could me longer than that
-            # we split the chat into chunks and create multiple summarize requests which responses we concatenate together in the end
-            # print(f"\033[1;43mMESSAGES\033[0m {messages}", flush=True)
-            for i in range(0, len(messages), chunk_size):
-                # Slice the message from the current index i up to i + chunk_size
-                # message_chunk = f"Chatroom: {conversation_name} at {day} \n \n \n { messages[i:i + chunk_size] }"
-                message_chunk = f"{messages[i:i + chunk_size]}"
-                #print(f"\033[1;43m\tchunk {i}:\033[0m {message_chunk}", flush=True)
-                all_message_chunks += f"{messages[i:i + chunk_size]}\n"
-                # Create an MD5 hash object
-                hash_object = hashlib.md5()
-                hash_object.update(message_chunk.encode())
-                md5_hash = hash_object.hexdigest()
-
-                # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
-                data = {
-                    "input": f"""  You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
-                                    The chat log will be provided to you below contained within the following tags:
-
-                                    ***CHAT_LOG_START***
-                                    and
-                                    ***CHAT_LOG_END***
-
-                                    The chatlog will be formatted as follows:
-                                    2024-01-31 17:33:27 Participant 1 name: message
-                                    2024-01-31 17:32:22 Participant 2 name: message
-                                    ...and so on...
-
-                                    Here is the chat log you should summarize:
-                                    ***CHAT_LOG_START***
-                                    {message_chunk}
-                                    ***CHAT_LOG_END***
-                                    Now, please provide an insighful summary of the provided chat log.
-                                    Please, do not leave out any important facts! But keep the summary still compact so that its readable in roughly 30 seconds.
-                                """,
-                    "type": task_type,
-                    "appId": os.environ["APP_ID"],
-                    "identifier": md5_hash,
-                }
-                add_task_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=data)
-                #print(f"\033[1;46m\tAdd task result\033[0m {add_task_result}", flush=True)
-                # Accessing values by keys
-                for _, value in add_task_result.items():
-                    #print(f"\t\033[1;42mAdding Output\033[0m {value['output']}", flush=True)
-                    summary += f" {value['output']}"
-
-            summary = summary.lstrip(" \t")
-
-            # check if the created summary exceeds the possible size, if yes we have to create another ai job to summarize the summary
-            if len(messages) > chunk_size:
-                print("\t\033[1;33mSummarize the summary\033[0m")
-                try:
-                    # Create an MD5 hash object
-                    hash_object = hashlib.md5()
-                    hash_object.update(summary.encode())
-                    md5_hash = hash_object.hexdigest()
-
-                    # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
-                    data = {
-                        "input": f"""  You are a secretary and tasked with providing an insightful and succint summarization of a chat log.
-                                        The chat log will be provided to you below contained within the following tags:
-
-                                        ***CHAT_LOG_START***
-                                        and
-                                        ***CHAT_LOG_END***
-
-                                        The chatlog will be formatted as follows:
-                                        summary of all messages
-                                        ...and so on...
-
-                                        Here is the chat log you should summarize:
-                                        ***CHAT_LOG_START***
-                                        {summary}
-                                        ***CHAT_LOG_END***
-                                        Now, please provide an insighful summary of the provided chat log.
-                                        Please, do not leave out any important facts! But keep the summary still compact so that its readable in roughly 30 seconds.
-                                    """,
-                        "type": task_type,
-                        "appId": os.environ["APP_ID"],
-                        "identifier": md5_hash,
-                    }
-
-                    summary = ""
-                    add_task_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=data)
-                    # Accessing values by keys
-                    for _, value in add_task_result.items():
-                        summary += f" {value['output']}"
-                    summary = summary.lstrip(" \t")
-
-                except Exception:
-                    print("Error: Failed to summarize the summary", flush=True)
-
-            # Create the topics out of the summary
-            try:
-                # Create an MD5 hash object
-                hash_object = hashlib.md5()
-                hash_object.update(all_messages.encode())
-                md5_hash = hash_object.hexdigest()
-                # we need to limit the messages characters, otherwise we get a <Response [414 Request-URI Too Long]> if it exceeds 5400 characters
-                topic_data = {
-                    "input": f"""  You are tasked with providing an insightful and succint summarization in topics of a summary.
-                                    The topics should be seperated in new lines, each line should begin with a trailing dash.
-                                    Each topic should be very short and consist of a maximum of 8 words.
-                                    The summary will be provided to you below contained within the following tags:
-                                    ***CHAT_LOG_START***
-                                    and
-                                    ***CHAT_LOG_END***
-                                    Here is the summary you should create topics from:
-                                    ***CHAT_LOG_START***
-                                    {summary}
-                                    ***CHAT_LOG_END***
-                                    Now, please provide an insighful topics of the summary with maximum 8 words for each topic.
-                                    Please, do not leave out any important topics! The topics should be seperated in new lines and consist of maximum 8 words for each topic.
-                                """,
-                    "type": task_type,
-                    "appId": os.environ["APP_ID"],
-                    "identifier": md5_hash,
-                }
-
-                add_topic_result = nc_app.ocs(method="POST", path=add_task_ocs_url, json=topic_data)
-                # Accessing values by keys
-                topic_output = ""
-                for _, value in add_topic_result.items():
-                    #print(f"\033[1;31mTopic output\033[0m {value['output']}", flush=True)
-                    topic_output += f" {value['output']}"
-                topics = re.sub(r"^[\t ]+", "", f"{topic_output}")
-                topics = process_topics(topics)
-
-            except Exception as e:
-                print(f"\033[1;31mError\033[0m Cant create topics {e}")
-                topics = ""
-
-            ai_info = "\u2139\ufe0f *This output was generated by AI. Make sure to double-check.*"
-            if topics:
-                # Finally - send the summarized message to the chat
-                msg = f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n*{summary}*"""
-                #print(msg, flush=True)
-                SUMMARAI.send_message(f"""\n**Topics:**\n{topics}\n\n**Summary:**\n\n{summary}\n\n{ai_info}""", message)
-            else:
-                SUMMARAI.send_message(f"""\n**Summary:**\n{summary}\n\n{ai_info}""", message)
-
-        except Exception as e:
-            logging.error(f"1. An error occurred: {e}")
-            # SUMMARAI.send_message(f"```1 An error occurred: {e}```", message)
-
-    except Exception as e:
-        logging.error(f"2. An error occurred: {e}")
-        # SUMMARAI.send_message(f"```2 An error occurred: {e}```", message)
+    (formatted_chat_messages, cutoff) = get_ctx_limited_messages(chat_messages)
+    try:
+        summary = ocs_get_summary(formatted_chat_messages, message.conversation_name)
+        local_tz = tzlocal.get_localzone()
+        ai_info = (
+            "\u2139\ufe0f *This output was generated by AI. Make sure to double-check."
+            f" (All times are in {local_tz.key or 'server\'s'} timezone)*\n"
+        )
+        if cutoff:
+            ai_info += f"\n\n*Note: Messages before \"{cutoff}\" were not included in the summary due to the length limit.*"
+        SUMMARAI.send_message(f"""**Summary:**\n{summary}\n\n{ai_info}""", message)
+    except Exception:
+        error_handler("Could not get a summary from any large language model", message)
 
 
-def is_numbers_and_colon(s):
+def is_numbers_and_colon(s: str):
     return all(char.isdigit() or char == ":" for char in s)
 
 
 def help_message(message, text):
-    SUMMARAI.send_message(
-        f"\n\n**{os.environ['APP_ID']}**:\n*{text}*\n\n**Commands:**\n```\nAdd a SummarAI job (The job will be executed"
-        f" daily at the same time):\n\t@{os.environ['APP_ID']} add <hour>:<minute>\n\nList scheduled SummarAI"
-        f" jobs:\n\t@{os.environ['APP_ID']} list\n\nDelete a SummarAI job:\n\t@{os.environ['APP_ID']} delete"
-        f" <job_id>\n\nPrints a help message:\n\t@{os.environ['APP_ID']} help\n```",
+    SUMMARAI.send_message(f"""
+**{os.environ["APP_DISPLAY_NAME"]}**:
+*{text}*
+
+**Commands:**
+```
+Create a summary from last 24 hours of chat messages:
+    @summary
+
+Create a summary from last provided duration of chat messages ("30m" for 30 minutes, "3h40m" for 3 hours and 40 minutes, "1d" for 1 day):
+    @summary <duration>
+
+Add a {os.environ["APP_DISPLAY_NAME"]} job (The job will be executed daily at the same time, in 24-hour format):
+    @summary add <hour>:<minute>
+
+List scheduled {os.environ["APP_DISPLAY_NAME"]} jobs:
+    @summary list
+
+Delete a {os.environ["APP_DISPLAY_NAME"]} job:
+    @summary delete <job_id>
+
+Prints a help message:
+    @summary help
+```
+""", # noqa: E501
         message,
     )
+
+
+def render_activity_message(message: talk_bot.TalkBotMessage) -> str:
+    msg = message.object_content["message"]
+    params = message.object_content["parameters"]
+
+    if msg == "Someone voted on the poll {poll}":
+        # not important for the summary
+        raise NotImplementedError()
+
+    if msg == "{file}":
+        return f"{message.actor_display_name} uploaded a file named {params['file']['name']}"
+
+    if msg == "{object}":
+        if message.object_content["parameters"]["object"]["type"] == "talk-poll":
+            return f"{message.actor_display_name} created a poll titled {params['object']['name']}"
+        return f"{message.actor_display_name} created a {params['object']['type']} titled {params['object']['name']}"
+
+    for key in ("user", "user1", "user2", "user3", "user4", "user5", "actor", "poll"):
+        if f"{{{key}}}" not in msg:
+            continue
+        msg = msg.replace(f"{{{key}}}", message.object_content["parameters"][key]["name"])
+
+    return msg
+
+
+def store_message(tmsg: talk_bot.TalkBotMessage):
+    logger.debug("\033[1;44mMessage\033[0m %s", tmsg._raw_data)
+    message = ""
+    match tmsg.message_type:
+        case "Join":
+            message = f"{tmsg.actor_display_name} added Summary bot to the conversation"
+        case "Leave":
+            message = f"{tmsg.actor_display_name} removed Summary bot from the conversation"
+        case "Create" if tmsg.object_media_type.startswith("text/") and not tmsg.actor_id.startswith("bot"):
+            # text messages which are not from other bots
+            message = tmsg.object_content["message"]
+        case "Activity":
+            try:
+                message = render_activity_message(tmsg)
+            except KeyError:
+                logger.warning("KeyError in parsing the activity message: %s", tmsg.object_content)
+                return
+            except NotImplementedError:
+                return
+        case _:
+            logger.debug("Unsupported message type: %s", tmsg.message_type)
+            return
+
+    try:
+        # all calculations based on server time
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        store.ChatMessages.create(
+            timestamp=current_datetime,
+            room_id=tmsg.conversation_token,
+            actor=tmsg.actor_display_name,
+            message=message,
+        )
+    except Exception:
+        error_handler("Error occured while storing the message")
+
+
+def format_message(message: store.ChatMessages) -> str:
+    return (
+        "<msg>"
+        f"<ts>{message.timestamp}</ts>"
+        f"<at>{message.actor}</at>"
+        f"<cnt>{message.message}</cnt>"
+        "</msg>"
+    )
+
+
+def handle_command(message: talk_bot.TalkBotMessage):
+    conversation_token = message.conversation_token
+    conversation_name = message.conversation_name
+
+    if message.object_content["message"].strip() == f"@summary":
+        # Create a summary from last 24 hours of chat messages
+        SUMMARAI.send_message("```Creating a summary from last 24 hours of chat messages```", message)
+        last_x_duration_process(message)
+    elif message.object_content["message"].startswith(f"@summary "):
+        param = message.object_content["message"].split(" ")[1]
+        if param not in available_params:
+            if TimeLength(param).result.success:
+                # Create a summary from last provided duration of chat messages ("30m" for 30 minutes, "3h40m"
+                # for 3 hours and 40 minutes, "1d" for 1 day):
+                SUMMARAI.send_message(f"```Creating a summary from last {param} of chat messages```", message)
+                last_x_duration_process(message, param)
+                return
+
+            help_message(
+                message,
+                "Invalid time string provided, please use '30m' for 30 minutes, '3h40m' for 3 hours and 40 minutes,"
+                " '1d' for 1 day",
+            ) # noqa: E501
+            return
+
+        #########
+        #
+        # Check for parameters that arent times
+        #
+        #########
+        if param == "add":
+            hour_minute = message.object_content["message"].split(" ")[2]
+
+            if not is_numbers_and_colon(hour_minute):
+                SUMMARAI.send_message("```Usage: @summary <hour>:<minute>```", message)
+                return
+
+            try:
+                # Splitting the string into hour and minute
+                hour, minute = hour_minute.split(":")
+                try:
+                    hour = int(hour)
+                    minute = int(minute)
+                except ValueError:
+                    SUMMARAI.send_message("```Hour and/or minute(s) are not integers.```", message)
+                    return
+
+                if not is_valid_time(hour, minute):
+                    SUMMARAI.send_message(
+                        "```Its not a valid time - please use @summary hour:minute to schedule the"
+                        " bot for execution```",
+                        message,
+                    )
+                    return
+
+                # Parameters for the new job
+                new_job_hour = int(hour)
+                new_job_minute = int(minute)
+                new_job_hash = f"{conversation_token}_{hashlib.md5(f'{conversation_token}_{conversation_name}_{new_job_hour}_{new_job_minute}'.encode()).hexdigest()}" # noqa: E501, S324
+
+                # Check if a similar job already exists
+                job_exists = False
+                job_hash = new_job_hash
+
+                job_hour = -1
+                job_minute = -1
+                for job in scheduler.get_jobs():
+                    trigger = job.trigger
+
+                    old_conversation_token = job.id.split("_")[0]
+
+                    if isinstance(trigger, CronTrigger):
+                        job_hour = trigger.fields[trigger.FIELD_NAMES.index("hour")]
+                        job_minute = trigger.fields[trigger.FIELD_NAMES.index("minute")]
+                        job_day_of_week = trigger.fields[trigger.FIELD_NAMES.index("day_of_week")]
+
+                        old_job_hash = f"{old_conversation_token}_{hashlib.md5(f'{old_conversation_token}_{conversation_name}_{job_hour}_{job_minute}'.encode()).hexdigest()}" # noqa: E501, S324
+
+                        if isinstance(job_hour, BaseField):
+                            job_hour = job_hour.expressions[0]
+                            job_hour = int(f"{hour}")
+
+                        if isinstance(job_minute, BaseField):
+                            job_minute = job_minute.expressions[0]
+                            job_minute = int(f"{job_minute}")
+
+                        if (
+                            job_hour == new_job_hour
+                            and job_minute == new_job_minute
+                            and old_job_hash == new_job_hash
+                        ):
+                            job_exists = True
+                            break
+
+                if job_exists:
+                    if job_hour <= 9:
+                        job_hour = f"0{job_hour}"
+                    if job_minute <= 9:
+                        job_minute = f"0{job_minute}"
+
+                    if job_hour == -1 or job_minute == -1:
+                        return
+
+                    SUMMARAI.send_message(
+                        f"```Skip - A {os.environ['APP_DISPLAY_NAME']} job already exists at {job_hour}:{job_minute}:00 for"
+                        f" '{conversation_name}'```",
+                        message,
+                    )
+                    return
+
+                ##########
+                #
+                # Finally - Add the job with the conversation name (Name of the chatroom / Chat)
+                #
+                ##########
+
+                scheduler.add_job(
+                    lambda: sched_process_request(message=message, job_hash=job_hash),
+                    "cron",
+                    hour=hour,
+                    minute=minute,
+                    day_of_week="*",
+                    id=job_hash,
+                )
+                if hour <= 9:
+                    hour = f"0{hour}"
+                if minute <= 9:
+                    minute = f"0{minute}"
+                SUMMARAI.send_message(
+                    f"```New: Added a daily {os.environ["APP_DISPLAY_NAME"]} task at {hour}:{minute}:00 for '{conversation_name}' with the"
+                    f" id: {job_hash}```",
+                    message,
+                )
+            except Exception:
+                error_handler("Error occured while adding the job", message)
+
+        elif param == "list":
+            jobs = scheduler.get_jobs()
+            job_list = []
+            for idx, job in enumerate(jobs):
+                logging.info("Job ID: %s, Next Run Time: %s", job.id, job.next_run_time)
+                trigger = job.trigger
+
+                job_hour = int(f"{trigger.fields[trigger.FIELD_NAMES.index('hour')].expressions[0]}")
+                if job_hour <= 9:
+                    job_hour = f"0{job_hour}"
+
+                job_minute = int(f"{trigger.fields[trigger.FIELD_NAMES.index('minute')].expressions[0]}")
+                if job_minute <= 9:
+                    job_minute = f"0{job_minute}"
+
+                job_day_of_week = f"{trigger.fields[trigger.FIELD_NAMES.index('day_of_week')].expressions[0]}"
+                if job_day_of_week == "*":
+                    job_day_of_week = "Daily"
+
+                if f"{job.id}".startswith(f"{conversation_token}_"):
+                    job_list.append(f"{idx + 1}. Job ID: {job.id} {job_hour}:{job_minute}:00 {job_day_of_week}")
+
+            # Check if job_list is empty
+            if not job_list:
+                job_list.append(f"No {os.environ['APP_ID']} job scheduled for '{conversation_name}'")
+
+            job_list_str = "\n".join(job_list)
+
+            SUMMARAI.send_message(f"```Scheduled Jobs:\n{job_list_str}\n```", message)
+
+        elif param == "delete":
+            try:
+                job_id_to_delete = message.object_content["message"].split(" ")[2]
+            except Exception:
+                job_id_to_delete = False
+
+            if not job_id_to_delete:
+                SUMMARAI.send_message(
+                    "```No Job ID to delete given - use '@summary list' to get a list of scheduled"
+                    " job ids```",
+                    message,
+                )
+                return
+
+            #######
+            #
+            # Check if we are member of the room and therefore allowed to do it
+            # otherwise a scheduled job could be deleted from every other room
+            #
+            #######
+
+            job_deleted = False
+
+            if job_id_to_delete.startswith(f"{conversation_token}_"):
+                jobs = scheduler.get_jobs()
+                for job in jobs:
+                    if job.id == job_id_to_delete:
+                        scheduler.remove_job(job_id_to_delete)
+                        job_deleted = True
+            else:
+                SUMMARAI.send_message(
+                    "```You are not allowed to do that - you need to be member of the room```",
+                    message,
+                )
+                return
+
+            if job_deleted:
+                SUMMARAI.send_message(
+                    f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```",
+                    message,
+                )
+                return
+        else:
+            help_message(message, "I am happy to help, these are commands you can use")
+            return
 
 
 @APP.post(f"/{os.environ['APP_ID']}")
 async def summarai(
     message: Annotated[talk_bot.TalkBotMessage, Depends(atalk_bot_msg)],
 ):
-    conversation_token = message.conversation_token
-    conversation_name = message.conversation_name
-    if message.object_content["message"].startswith(f"@{os.environ['APP_ID']} "):
-        param = message.object_content["message"].split(" ")[1]
-        #######
-        #
-        # if we dont have a available parameter than we expect it is a scheduled job and check/process it further
-        #
-        #######
-
-        if param not in available_params:
-            text = "You gave me a command i don't understand, these are available commands"
-            help_message(message, text)
-            return Response()
-        else:
-
-            #########
-            #
-            # Check for parameters that arent times
-            #
-            #########
-            if param == "add":
-                hour_minute = message.object_content["message"].split(" ")[2]
-
-                if not is_numbers_and_colon(hour_minute):
-                    SUMMARAI.send_message(f"```Usage: @{os.environ['APP_ID']} <hour>:<minute>```", message)
-                    return Response()
-
-                try:
-                    # Splitting the string into hour and minute
-                    hour, minute = hour_minute.split(":")
-                    try:
-                        hour = int(hour)
-                        minute = int(minute)
-                    except ValueError:
-                        info_msg = "Hour and/or minute(s) are not integers."
-                        logging.error(info_msg)
-                        SUMMARAI.send_message(f"```{info_msg}```", message)
-                        return Response()
-
-                    if not is_valid_time(hour, minute):
-                        logging.error(f"Its not a valid time {hour}:{minute}:00")
-                        SUMMARAI.send_message(
-                            f"```Its not a valid time - please use @{os.environ['APP_ID']} hour:minute to schedule the"
-                            " bot for execution```",
-                            message,
-                        )
-                        return Response()
-
-                    # Parameters for the new job
-                    new_job_hour = int(hour)
-                    new_job_minute = int(minute)
-                    new_job_hash = f"{conversation_token}_{hashlib.md5(f'{conversation_token}_{conversation_name}_{new_job_hour}_{new_job_minute}'.encode()).hexdigest()}"
-
-                    # Check if a similar job already exists
-                    job_exists = False
-                    job_hash = new_job_hash
-
-                    for job in scheduler.get_jobs():
-                        trigger = job.trigger
-
-                        old_conversation_token = job.id.split("_")[0]
-
-                        if isinstance(trigger, CronTrigger):
-                            job_hour = trigger.fields[trigger.FIELD_NAMES.index("hour")]
-                            job_minute = trigger.fields[trigger.FIELD_NAMES.index("minute")]
-                            job_day_of_week = trigger.fields[trigger.FIELD_NAMES.index("day_of_week")]
-
-                            old_job_hash = f"{old_conversation_token}_{hashlib.md5(f'{old_conversation_token}_{conversation_name}_{job_hour}_{job_minute}'.encode()).hexdigest()}"
-
-                            if isinstance(job_hour, BaseField):
-                                job_hour = job_hour.expressions[0]
-                                job_hour = int(f"{hour}")
-
-                            if isinstance(job_minute, BaseField):
-                                job_minute = job_minute.expressions[0]
-                                job_minute = int(f"{job_minute}")
-
-                            if (
-                                job_hour == new_job_hour
-                                and job_minute == new_job_minute
-                                and old_job_hash == new_job_hash
-                            ):
-                                job_exists = True
-                                break
-
-                    if job_exists:
-
-                        if job_hour <= 9:
-                            job_hour = f"0{job_hour}"
-                        if job_minute <= 9:
-                            job_minute = f"0{job_minute}"
-
-                        SUMMARAI.send_message(
-                            f"```Skip - A {os.environ['APP_ID']} job already exists at {job_hour}:{job_minute}:00 for"
-                            f" '{conversation_name}' with the id: {job.id}```",
-                            message,
-                        )
-                        return Response()
-
-                    ##########
-                    #
-                    # Finally - Add the job with the conversation name (Name of the chatroom / Chat)
-                    #
-                    ##########
-                    
-                    if conversation_token not in chat_log.keys():
-                        SUMMARAI.send_message(
-                            f"```There was no conversation since i joined '{conversation_name}'```",
-                            message,
-                        )
-                        return Response()
-
-                    scheduler.add_job(
-                        lambda: summarai_talk_bot_process_request(
-                            message=message,
-                            chat_messages=chat_log[conversation_token],
-                            conversation_name=conversation_name,
-                            conversation_token=conversation_token,
-                        ),
-                        "cron",
-                        hour=hour,
-                        minute=minute,
-                        day_of_week="*",
-                        id=job_hash,
-                    )
-                    if hour <= 9:
-                        hour = f"0{hour}"
-                    if minute <= 9:
-                        minute = f"0{minute}"
-                    SUMMARAI.send_message(
-                        f"```New: Added a daily SummarAI task at {hour}:{minute}:00 for '{conversation_name}' with the"
-                        f" id: {job_hash}```",
-                        message,
-                    )
-                except Exception as e:
-                    logging.error(f"A error occured: {e}")
-                    SUMMARAI.send_message(f"```Error {e}```", message)
-
-            elif param == "list":
-                jobs = scheduler.get_jobs()
-                job_list = []
-                for idx, job in enumerate(jobs):
-                    logging.info(f"Job ID: {job.id}, Next Run Time: {job}")
-                    trigger = job.trigger
-
-                    job_hour = int(f"{trigger.fields[trigger.FIELD_NAMES.index('hour')].expressions[0]}")
-                    if job_hour <= 9:
-                        job_hour = f"0{job_hour}"
-
-                    job_minute = int(f"{trigger.fields[trigger.FIELD_NAMES.index('minute')].expressions[0]}")
-                    if job_minute <= 9:
-                        job_minute = f"0{job_minute}"
-
-                    job_day_of_week = f"{trigger.fields[trigger.FIELD_NAMES.index('day_of_week')].expressions[0]}"
-                    if job_day_of_week == "*":
-                        job_day_of_week = "Daily"
-
-                    if f"{job.id}".startswith(f"{conversation_token}_"):
-                        job_list.append(f"{idx + 1}. Job ID: {job.id} {job_hour}:{job_minute}:00 {job_day_of_week}")
-
-                # Check if job_list is empty
-                if not job_list:
-                    job_list.append(f"No {os.environ['APP_ID']} job scheduled for '{conversation_name}'")
-
-                job_list_str = "\n".join(job_list)
-
-                SUMMARAI.send_message(f"```Scheduled Jobs:\n{job_list_str}\n```", message)
-
-            elif param == "delete":
-                try:
-                    job_id_to_delete = message.object_content["message"].split(" ")[2]
-                except:
-                    job_id_to_delete = False
-
-                if not job_id_to_delete:
-                    SUMMARAI.send_message(
-                        f"```No Job ID to delete given - use '@{os.environ['APP_ID']} list' to get a list of scheduled"
-                        " job ids```",
-                        message,
-                    )
-                    return Response()
-
-                #######
-                #
-                # Check if we are member of the room and therefore allowed to do it
-                # otherwise a scheduled job could be deleted from every other room
-                #
-                #######
-
-                job_deleted = False
-
-                if job_id_to_delete.startswith(f"{conversation_token}_"):
-                    jobs = scheduler.get_jobs()
-                    for job in jobs:
-                        if job.id == job_id_to_delete:
-                            scheduler.remove_job(job_id_to_delete)
-                            job_deleted = True
-                else:
-                    SUMMARAI.send_message(
-                        "```You are not allowed to do that - you need to be member of the room```",
-                        message,
-                    )
-                    return Response()
-
-                if job_deleted:
-                    SUMMARAI.send_message(
-                        f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```",
-                        message,
-                    )
-                    return Response()
-            elif param == "help":
-                text = "I am happy to help, these are commands you can use"
-                help_message(message, text)
-                return Response()
-            else:
-                text = "Yes I am here and listening"
-                help_message(message, text)
-                return Response()
-
-    elif (
-        message.object_content["message"].startswith(f"@{os.environ['APP_ID']}")
-        and message.object_content["message"].endswith(f"@{os.environ['APP_ID']}")
-    ) or (
-        message.object_content["message"].startswith(f"@{os.environ['APP_ID']} ")
-        and message.object_content["message"].endswith(f"@{os.environ['APP_ID']} ")
+    bot_mention_regex = re.compile("^@summary$|^@summary\\s.*", re.IGNORECASE)
+    # store the message if its not a command
+    if (
+        message.message_type != "Create"
+        or not message.object_media_type.startswith("text/")
+        or not bot_mention_regex.match(message.object_content["message"].strip())
     ):
-        text = "Hi! I am here and listening"
-        help_message(message, text)
+        executor.submit(store_message, message)
         return Response()
-    else:
-        if conversation_token not in chat_log:
-            chat_log[conversation_token] = []
 
-        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # Message will be structured like this
-        # 2024-01-31 17:33:27 Participant 1 name: message
-        chat_message = f'{current_datetime} {message.actor_display_name}: {message.object_content["message"]}'
-        chat_log[conversation_token].append(chat_message)
-
-        #print(
-        #    f"\033[1;44mChat log:\033[0m\033[1;34m {conversation_token} - {conversation_name} \033[0m",
-        #    chat_log[conversation_token],
-        #    flush=True,
-        #)
-
+    executor.submit(handle_command, message)
     return Response()
 
 
@@ -646,8 +622,8 @@ def enabled_handler(enabled: bool, nc: NextcloudApp) -> str:
     try:
         # `enabled_handler` will install or uninstall bot on the server, depending on ``enabled`` parameter.
         SUMMARAI.enabled_handler(enabled, nc)
-    except Exception as e:
-        return str(e)
+    except Exception:
+        error_handler("Error occured while enabling/disabling the bot")
     return ""
 
 
