@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <info>
-	<id>summarai</id>
+	<id>summary_bot</id>
 	<name>Summary Bot</name>
 	<summary>Summary Bot - Nextcloud Talk chat summarize bot</summary>
 	<description><![CDATA[# Summary Bot - Talk chat summarize bot
@@ -22,18 +22,18 @@ This ensures that users can quickly grasp the essence of discussions without rea
 	<version>1.1.0</version>
 	<licence>MIT</licence>
 	<author mail="florian.klinger@nextcloud.com" homepage="https://github.com/nc-fkl">Florian Klinger</author>
-	<namespace>SummarAI</namespace>
+	<namespace>SummaryBot</namespace>
 	<category>tools</category>
-	<website>https://github.com/nextcloud/sumupbot</website>
-	<bugs>https://github.com/nextcloud/sumupbot/issues</bugs>
-	<repository type="git">https://github.com/nextcloud/sumupbot.git</repository>
+	<website>https://github.com/nextcloud/summary_bot</website>
+	<bugs>https://github.com/nextcloud/summary_bot/issues</bugs>
+	<repository type="git">https://github.com/nextcloud/summary_bot.git</repository>
 	<dependencies>
 		<nextcloud min-version="30" max-version="31"/>
 	</dependencies>
 	<external-app>
 		<docker-install>
 			<registry>ghcr.io</registry>
-			<image>nextcloud/sumupbot</image>
+			<image>nextcloud/summary_bot</image>
 			<image-tag>1.1.0</image-tag>
 		</docker-install>
 		<scopes>

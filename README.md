@@ -30,38 +30,40 @@ How To Install
 
 3.1.1 Run the docker image provided by the registry server
 
-	> sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summarai -e APP_DISPLAY_NAME="Summary Bot" -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=<APP_VERSION> -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/sumupbot:latest
+	sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summary_bot -e APP_DISPLAY_NAME="Summary Bot" -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=<APP_VERSION> -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/summary_bot:latest
 
 3.2.1 **OR**: Build the docker image locally
 
-	Example assuming you are in the source directory of the cloned repository
+Example assuming you are in the source directory of the cloned repository
 
-	> docker build --no-cache -f Dockerfile -t ghcr.io/nextcloud/sumupbot:latest .
+	docker build --no-cache -f Dockerfile -t ghcr.io/nextcloud/summary_bot:latest .
 
-	Deploy the docker image with Bot to docker.
+Deploy the docker image with Bot to docker.
 
-	Example assuming you are in the source directory of the cloned repository
+Example assuming you are in the source directory of the cloned repository
 
-	> sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summarai -e APP_DISPLAY_NAME="Summary Bot" -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=<APP_VERSION> -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/sumupbot:latest
+	sudo docker run -ti -v /etc/localtime:/etc/localtime:ro -v /etc/timezone:/etc/timezone:ro -e APP_ID=summary_bot -e APP_DISPLAY_NAME="Summary Bot" -e APP_HOST=0.0.0.0 -e APP_PORT=9031 -e APP_SECRET=12345 -e APP_VERSION=<APP_VERSION> -e NEXTCLOUD_URL='<YOUR_NEXTCLOUD_URL_REACHABLE_FROM_INSIDE_DOCKER>' -p 9031:9031 ghcr.io/nextcloud/summary_bot:latest
 
 4. Register the Summary Bot
 
-	> (Hint: In both cases, registering manually or via makefile, adjust the json dictionary that it fits your environment/needs)
+> (Hint: In both cases, registering manually or via makefile, adjust the json dictionary that it fits your environment/needs)
 
-	**Register manually:**
+**Register manually:**
 
-	*Example assuming you are in the source directory of your nextcloud instance where occ is located and the default user www-data got execution rights on occ*
+*Example assuming you are in the source directory of your nextcloud instance where occ is located and the default user www-data got execution rights on occ*
 
-    *Unregistering Summary Bot*
-	> sudo -u www-data php ./occ app_api:app:unregister summarai
+*Unregistering Summary Bot*
 
-    *Registering Summary Bot:*
-	> sudo -u www-data php ./occ app_api:app:register summarai manual_install --json-info '{ "id": "summarai", "name": "Summary Bot", "daemon_config_name": "manual_install", "version": "<APP_VERSION>", "secret": "12345", "host": "192.168.0.199", "port": 9031, "scopes": ["AI_PROVIDERS", "TALK", "TALK_BOT"], "protocol": "http"}' --force-scopes --wait-finish
+	sudo -u www-data php ./occ app_api:app:unregister summary_bot
 
-	**OR**
+*Registering Summary Bot:*
 
-	**Register via Makefile:**
+	sudo -u www-data php ./occ app_api:app:register summary_bot manual_install --json-info '{ "id": "summary_bot", "name": "Summary Bot", "daemon_config_name": "manual_install", "version": "<APP_VERSION>", "secret": "12345", "host": "192.168.0.199", "port": 9031, "scopes": ["AI_PROVIDERS", "TALK", "TALK_BOT"], "protocol": "http"}' --force-scopes --wait-finish
 
-	*Example assuming you are in the source directory of the cloned repository*
+**OR**
 
-	> make register_local
+**Register via Makefile:**
+
+*Example assuming you are in the source directory of the cloned repository*
+
+	make register_local
