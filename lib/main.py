@@ -27,7 +27,7 @@ from timelength import TimeLength
 
 #### For local dev purposes
 # os.environ["APP_HOST"] = "0.0.0.0"
-# os.environ["APP_ID"] = "summarai"
+# os.environ["APP_ID"] = "summary_bot"
 # os.environ["APP_DISPLAY_NAME"] = "Summary Bot"
 # os.environ["APP_PORT"] = "9031"
 # os.environ["APP_SECRET"] = "12345"
@@ -37,6 +37,11 @@ from timelength import TimeLength
 
 # Imported here to register environment variables before importing store (only for local dev purposes)
 import store
+
+
+class LLMException(Exception):
+    pass
+
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -58,7 +63,7 @@ APP = FastAPI(lifespan=lifespan)
 
 # We define bot globally, so if no `multiprocessing` module is used, it can be reused by calls.
 # All stuff in it works only with local variables, so in the case of multithreading, there should not be problems.
-SUMMARAI = talk_bot.TalkBot(
+BOT = talk_bot.TalkBot(
     f"/{os.environ['APP_ID']}",
     f"{os.environ['APP_DISPLAY_NAME']}",
     "For usage instructions, type: @summary help",
@@ -106,7 +111,7 @@ def error_handler(custom_err_msg: str, message: talk_bot.TalkBotMessage | None =
     logger.error("An error occurred: %s", custom_err_msg)
     traceback.print_exc()
     if message:
-        SUMMARAI.send_message(f"```{custom_err_msg}```", message)
+        BOT.send_message(f"```{custom_err_msg}```", message)
 
 
 def is_valid_time(hour, minute):
@@ -117,14 +122,14 @@ def is_task_type_available():
     try:
         nc = Nextcloud()
         tasktype_result = nc.ocs(method="GET", path="/ocs/v2.php/taskprocessing/tasktypes")
-    except Exception as e:
-        logging.error(f"An error occurred while fetching the list of available tasktypes: {e}")
+    except Exception:
+        error_handler("An error occurred while fetching the list of available tasktypes")
         return False
 
     # Check for the specific task type ID
     task_type = "core:text2text"
     if not isinstance(tasktype_result, dict) or task_type not in tasktype_result.get("types", {}):
-        logging.error(f"The neccessary task type: {task_type} is not available")
+        error_handler(f"The neccessary task type: {task_type} is not available")
         return False
 
     return True
@@ -132,12 +137,12 @@ def is_task_type_available():
 
 def validate_task_response(response) -> dict:
     if not isinstance(response, dict) or "task" not in response:
-        raise Exception("Failed to create Nextcloud TaskProcessing task")
+        raise LLMException("Failed to create Nextcloud TaskProcessing task")
 
     task = response["task"]
 
     if not isinstance(task, dict) or "id" not in task or "status" not in task or "output" not in task:
-        raise Exception("Invalid Nextcloud TaskProcessing task response")
+        raise LLMException("Invalid Nextcloud TaskProcessing task response")
 
     return task
 
@@ -164,13 +169,13 @@ def ocs_get_summary(messages_str: str, conversation_name: str) -> str:
             task = validate_task_response(response)
             logger.debug("Task (%s) status: %s", task["id"], task["status"])
     except Exception as e:
-        raise Exception("Failed to create Nextcloud TaskProcessing task") from e
+        raise LLMException("Failed to create Nextcloud TaskProcessing task") from e
 
     if task["status"] != "STATUS_SUCCESSFUL":
-        raise Exception("Nextcloud TaskProcessing Task failed: " + task["status"])
+        raise LLMException("Nextcloud TaskProcessing Task failed: " + task["status"])
 
     if "output" not in task or "output" not in task["output"]:
-        raise Exception("No output in Nextcloud TaskProcessing task")
+        raise LLMException("No output in Nextcloud TaskProcessing task")
 
     return task["output"]["output"]
 
@@ -184,7 +189,7 @@ def sched_process_request(message: talk_bot.TalkBotMessage, job_hash: str):
     # nc_app.users_list() just provides all users of the system - therefore not usable in this case
     # nc_app.set_user('<username_of_the_room_goes_here>')
 
-    logger.debug(f"\033[1;42mProcessing request ({job_hash})...\033[0m")
+    logger.debug("\033[1;42mProcessing request (%s)...\033[0m", job_hash)
 
     ##############
     #
@@ -229,7 +234,7 @@ def get_ctx_limited_messages(chat_messages: list[store.ChatMessages]) -> tuple[s
 
 def last_x_duration_process(message: talk_bot.TalkBotMessage, hduration: str = "1d"):
     if not is_task_type_available():
-        SUMMARAI.send_message("```The required task type to generate the summary is not available```", message)
+        BOT.send_message("```The required task type to generate the summary is not available```", message)
         return
 
     timelength_res = TimeLength(hduration)
@@ -254,7 +259,7 @@ def last_x_duration_process(message: talk_bot.TalkBotMessage, hduration: str = "
             .where(store.ChatMessages.timestamp >= start_time_str)
 
         if chat_messages.count() == 0:
-            SUMMARAI.send_message(f"There was no conversation since i joined '{message.conversation_name}'", message)
+            BOT.send_message(f"There was no conversation since i joined '{message.conversation_name}'", message)
             return
     except Exception:
         error_handler("Error occured while fetching the messages from the database", message)
@@ -270,8 +275,8 @@ def last_x_duration_process(message: talk_bot.TalkBotMessage, hduration: str = "
         )
         if cutoff:
             ai_info += f"\n\n*Note: Messages before \"{cutoff}\" were not included in the summary due to the length limit.*"
-        SUMMARAI.send_message(f"""**Summary:**\n{summary}\n\n{ai_info}""", message)
-    except Exception:
+        BOT.send_message(f"""**Summary:**\n{summary}\n\n{ai_info}""", message)
+    except LLMException:
         error_handler("Could not get a summary from any large language model", message)
 
 
@@ -280,7 +285,7 @@ def is_numbers_and_colon(s: str):
 
 
 def help_message(message, text):
-    SUMMARAI.send_message(f"""
+    BOT.send_message(f"""
 **{os.environ["APP_DISPLAY_NAME"]}**:
 *{text}*
 
@@ -385,7 +390,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
     if message.object_content["message"].strip() == f"@summary":
         # Create a summary from last 24 hours of chat messages
-        SUMMARAI.send_message("```Creating a summary from last 24 hours of chat messages```", message)
+        BOT.send_message("```Creating a summary from last 24 hours of chat messages```", message)
         last_x_duration_process(message)
     elif message.object_content["message"].startswith(f"@summary "):
         param = message.object_content["message"].split(" ")[1]
@@ -393,7 +398,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
             if TimeLength(param).result.success:
                 # Create a summary from last provided duration of chat messages ("30m" for 30 minutes, "3h40m"
                 # for 3 hours and 40 minutes, "1d" for 1 day):
-                SUMMARAI.send_message(f"```Creating a summary from last {param} of chat messages```", message)
+                BOT.send_message(f"```Creating a summary from last {param} of chat messages```", message)
                 last_x_duration_process(message, param)
                 return
 
@@ -413,7 +418,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
             hour_minute = message.object_content["message"].split(" ")[2]
 
             if not is_numbers_and_colon(hour_minute):
-                SUMMARAI.send_message("```Usage: @summary <hour>:<minute>```", message)
+                BOT.send_message("```Usage: @summary <hour>:<minute>```", message)
                 return
 
             try:
@@ -423,11 +428,11 @@ def handle_command(message: talk_bot.TalkBotMessage):
                     hour = int(hour)
                     minute = int(minute)
                 except ValueError:
-                    SUMMARAI.send_message("```Hour and/or minute(s) are not integers.```", message)
+                    BOT.send_message("```Hour and/or minute(s) are not integers.```", message)
                     return
 
                 if not is_valid_time(hour, minute):
-                    SUMMARAI.send_message(
+                    BOT.send_message(
                         "```Its not a valid time - please use @summary hour:minute to schedule the"
                         " bot for execution```",
                         message,
@@ -482,7 +487,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
                     if job_hour == -1 or job_minute == -1:
                         return
 
-                    SUMMARAI.send_message(
+                    BOT.send_message(
                         f"```Skip - A {os.environ['APP_DISPLAY_NAME']} job already exists at {job_hour}:{job_minute}:00 for"
                         f" '{conversation_name}'```",
                         message,
@@ -507,7 +512,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
                     hour = f"0{hour}"
                 if minute <= 9:
                     minute = f"0{minute}"
-                SUMMARAI.send_message(
+                BOT.send_message(
                     f"```New: Added a daily {os.environ["APP_DISPLAY_NAME"]} task at {hour}:{minute}:00 for '{conversation_name}' with the"
                     f" id: {job_hash}```",
                     message,
@@ -543,7 +548,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
             job_list_str = "\n".join(job_list)
 
-            SUMMARAI.send_message(f"```Scheduled Jobs:\n{job_list_str}\n```", message)
+            BOT.send_message(f"```Scheduled Jobs:\n{job_list_str}\n```", message)
 
         elif param == "delete":
             try:
@@ -552,7 +557,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
                 job_id_to_delete = False
 
             if not job_id_to_delete:
-                SUMMARAI.send_message(
+                BOT.send_message(
                     "```No Job ID to delete given - use '@summary list' to get a list of scheduled"
                     " job ids```",
                     message,
@@ -575,14 +580,14 @@ def handle_command(message: talk_bot.TalkBotMessage):
                         scheduler.remove_job(job_id_to_delete)
                         job_deleted = True
             else:
-                SUMMARAI.send_message(
+                BOT.send_message(
                     "```You are not allowed to do that - you need to be member of the room```",
                     message,
                 )
                 return
 
             if job_deleted:
-                SUMMARAI.send_message(
+                BOT.send_message(
                     f"```Deleted Job {job_id_to_delete} from '{conversation_name}'```",
                     message,
                 )
@@ -593,7 +598,7 @@ def handle_command(message: talk_bot.TalkBotMessage):
 
 
 @APP.post(f"/{os.environ['APP_ID']}")
-async def summarai(
+async def summary_bot(
     message: Annotated[talk_bot.TalkBotMessage, Depends(atalk_bot_msg)],
 ):
     bot_mention_regex = re.compile("^@summary$|^@summary\\s.*", re.IGNORECASE)
@@ -621,7 +626,7 @@ def enabled_handler(enabled: bool, nc: NextcloudApp) -> str:
     print(f"enabled={enabled}")
     try:
         # `enabled_handler` will install or uninstall bot on the server, depending on ``enabled`` parameter.
-        SUMMARAI.enabled_handler(enabled, nc)
+        BOT.enabled_handler(enabled, nc)
     except Exception:
         error_handler("Error occured while enabling/disabling the bot")
     return ""
