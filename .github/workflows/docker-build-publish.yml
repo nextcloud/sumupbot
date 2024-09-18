@@ -48,7 +48,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/nextcloud/${{ github.repository }}:latest
-            ghcr.io/nextcloud/${{ github.repository }}:${{ fromJson(steps.appinfo.outputs.result).version }}
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ fromJson(steps.appinfo.outputs.result).version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
