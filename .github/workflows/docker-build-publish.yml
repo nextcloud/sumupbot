@@ -12,10 +12,15 @@ on:
 
 jobs:
   build_and_publish:
-    runs-on: ubuntu-latest
+    # Does not work on self-hosted runners
+    runs-on: ubuntu-22.04
 
     # Only allowed to be run on nextcloud repositories
     if: ${{ github.repository_owner == 'nextcloud' }}
+
+    permissions:
+      packages: write
+      contents: read
 
     steps:
       - name: Checkout app
