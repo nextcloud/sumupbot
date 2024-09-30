@@ -9,3 +9,5 @@ RUN \
 
 WORKDIR /app/lib
 ENTRYPOINT ["python3", "main.py"]
+
+LABEL org.opencontainers.image.source=https://github.com/nextcloud/summary_bot
